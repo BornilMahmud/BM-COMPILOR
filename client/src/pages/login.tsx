@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SiGithub } from "react-icons/si";
-import { Loader2 } from "lucide-react";
+import { Loader2, Code2 } from "lucide-react";
 
 export default function Login() {
   const { user, loading, login, loginError } = useAuth();
@@ -25,6 +25,10 @@ export default function Login() {
     );
   }
 
+  const handleGuest = () => {
+    navigate("/ide");
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#1a1a2e] p-4">
       <Card className="w-full max-w-md bg-[#16213e] border-[#0f3460] text-white shadow-2xl">
@@ -39,7 +43,7 @@ export default function Login() {
             Built with C + Flex + Bison.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 pt-4">
+        <CardContent className="space-y-3 pt-4">
           {loginError && (
             <Alert variant="destructive" data-testid="login-error">
               <AlertDescription className="text-sm">{loginError}</AlertDescription>
@@ -53,8 +57,25 @@ export default function Login() {
             <SiGithub className="mr-2 h-5 w-5" />
             Sign in with GitHub
           </Button>
-          <p className="text-center text-xs text-gray-400">
-            Uses Firebase Authentication with GitHub OAuth provider
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-[#0f3460]" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-[#16213e] px-3 text-gray-400">or</span>
+            </div>
+          </div>
+          <Button
+            onClick={handleGuest}
+            variant="outline"
+            className="w-full border-[#0f3460] text-gray-300 hover:bg-[#0f3460] hover:text-white h-12 text-base bg-transparent"
+            data-testid="button-guest"
+          >
+            <Code2 className="mr-2 h-5 w-5" />
+            Continue as Guest
+          </Button>
+          <p className="text-center text-xs text-gray-500">
+            Guest mode lets you write and run code. Sign in to save code to GitHub.
           </p>
         </CardContent>
       </Card>

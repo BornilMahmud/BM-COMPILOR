@@ -7,11 +7,13 @@ A web-based online compiler and code runner with GitHub integration. The compile
 
 ### Frontend (client/)
 - React + TypeScript SPA with 3 pages:
-  - **Login** (`/`) - Firebase GitHub OAuth sign-in
-  - **Repo Setup** (`/repo-setup`) - Create or select GitHub repository
-  - **IDE** (`/ide`) - Code editor, language selector, filename input, Run/Save buttons, terminal output
+  - **Login** (`/`) - Firebase GitHub OAuth sign-in OR "Continue as Guest"
+  - **Repo Setup** (`/repo-setup`) - Create or select GitHub repository (authenticated users only)
+  - **IDE** (`/ide`) - Code editor, language selector, filename input, Run/Save buttons, integrated terminal with stdin input
+- **Guest mode**: Users can access IDE without logging in; GitHub features (Save, repo) hidden for guests
 - Uses CodeMirror 6 for code editing (C/C++/Java/Python syntax)
 - Dark theme UI styled with Tailwind CSS
+- Terminal panel includes integrated stdin input area (multi-line) for programs that read user input
 - Auth via Firebase GitHub provider (existing setup)
 - GitHub token passed in `X-GitHub-Token` header
 

@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp, Keyboard } from "lucide-react";
+import { Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp, Terminal, User } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { javascript } from "@codemirror/lang-javascript";
@@ -41,44 +40,62 @@ export default function IDE() {
   const { user, loading, githubToken, logout } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const stdinRef = useRef<HTMLInputElement>(null);
 
   const [language, setLanguage] = useState<TargetLanguage>("c");
   const [filename, setFilename] = useState(defaultFilenames.c);
   const [code, setCode] = useState(defaultCode.c);
   const [stdinInput, setStdinInput] = useState("");
-  const [showStdin, setShowStdin] = useState(false);
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [output, setOutput] = useState<RunResult | null>(null);
-  const [status, setStatus] = useState<string>("");
+  const [terminalLines, setTerminalLines] = useState<Array<{ type: "system" | "stdout" | "stderr" | "stdin" | "info"; text: string }>>([
+    { type: "system", text: "BM Compiler Terminal — Ready" },
+    { type: "info", text: "Type your input below and press Run (or Ctrl+Enter) to execute." },
+  ]);
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [repo, setRepo] = useState<GithubRepo | null>(null);
 
+  const isGuest = !user;
+
   useEffect(() => {
-    if (!loading && !user) {
-      navigate("/");
-      return;
-    }
     const saved = localStorage.getItem("bm_selected_repo");
     if (saved) {
       try {
         setRepo(JSON.parse(saved));
       } catch {}
     }
-  }, [user, loading, navigate]);
+  }, []);
+
+  useEffect(() => {
+    if (terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [terminalLines]);
 
   const handleLanguageChange = useCallback((lang: TargetLanguage) => {
     setLanguage(lang);
     setFilename(defaultFilenames[lang]);
     setCode(defaultCode[lang]);
-    setOutput(null);
-    setStatus("");
+    setTerminalLines([
+      { type: "system", text: `Switched to ${targetLabels[lang]}` },
+      { type: "info", text: "Type your input below and press Run (or Ctrl+Enter) to execute." },
+    ]);
   }, []);
 
   const handleRun = async () => {
     setRunning(true);
-    setStatus("Running...");
-    setOutput(null);
+    setTerminalOpen(true);
+
+    const newLines: typeof terminalLines = [
+      { type: "system", text: `$ bmcc --lang ${language} --file "${filename}" run` },
+    ];
+    if (stdinInput.trim()) {
+      newLines.push({ type: "stdin", text: `[stdin] ${stdinInput}` });
+    }
+    newLines.push({ type: "info", text: "Compiling and running..." });
+    setTerminalLines(newLines);
+
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -94,18 +111,31 @@ export default function IDE() {
         }),
       });
       const result: RunResult = await res.json();
-      setOutput(result);
-      setStatus(result.ok ? "Run completed" : `Error (${result.phase})`);
-      setTerminalOpen(true);
-    } catch (err: any) {
-      setOutput({
-        ok: false,
-        exit_code: 1,
-        stdout: "",
-        stderr: err.message || "Request failed",
-        phase: "setup",
+
+      const outputLines: typeof terminalLines = [...newLines.slice(0, -1)];
+
+      if (result.stdout) {
+        result.stdout.split("\n").forEach((line) => {
+          if (line !== "") outputLines.push({ type: "stdout", text: line });
+        });
+      }
+      if (result.stderr) {
+        result.stderr.split("\n").forEach((line) => {
+          if (line !== "") outputLines.push({ type: "stderr", text: line });
+        });
+      }
+
+      outputLines.push({
+        type: result.ok ? "system" : "stderr",
+        text: `\nProcess exited with code ${result.exit_code} (${result.phase})`,
       });
-      setStatus("Error");
+
+      setTerminalLines(outputLines);
+    } catch (err: any) {
+      setTerminalLines([
+        ...newLines.slice(0, -1),
+        { type: "stderr", text: err.message || "Request failed" },
+      ]);
     } finally {
       setRunning(false);
     }
@@ -121,7 +151,6 @@ export default function IDE() {
       return;
     }
     setSaving(true);
-    setStatus("Saving...");
     try {
       const res = await fetch("/api/github/commit", {
         method: "POST",
@@ -138,7 +167,6 @@ export default function IDE() {
       });
       const data = await res.json();
       if (data.success) {
-        setStatus("Saved!");
         toast({
           title: "File saved",
           description: `${filename} committed to ${repo.name}`,
@@ -147,7 +175,6 @@ export default function IDE() {
         throw new Error(data.error || "Failed to save");
       }
     } catch (err: any) {
-      setStatus("Save failed");
       toast({
         title: "Save failed",
         description: err.message,
@@ -164,6 +191,13 @@ export default function IDE() {
     navigate("/");
   };
 
+  const handleStdinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      handleRun();
+    }
+  };
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -172,10 +206,10 @@ export default function IDE() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        handleSave();
+        if (!isGuest) handleSave();
       }
     },
-    [code, language, filename, githubToken, repo]
+    [code, language, filename, githubToken, repo, stdinInput, isGuest]
   );
 
   useEffect(() => {
@@ -236,35 +270,26 @@ export default function IDE() {
             Run
           </Button>
 
-          <Button
-            onClick={handleSave}
-            disabled={saving || !code.trim() || !repo}
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-4"
-            data-testid="button-save"
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-            ) : (
-              <Save className="h-4 w-4 mr-1" />
-            )}
-            Save
-          </Button>
-
-          <Button
-            onClick={() => setShowStdin((prev) => !prev)}
-            size="sm"
-            variant="ghost"
-            className={`h-8 px-2 ${showStdin ? "text-yellow-400" : "text-gray-400"} hover:text-white`}
-            title="Toggle stdin input (for programs that read user input)"
-            data-testid="button-toggle-stdin"
-          >
-            <Keyboard className="h-4 w-4" />
-          </Button>
+          {!isGuest && (
+            <Button
+              onClick={handleSave}
+              disabled={saving || !code.trim() || !repo}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-4"
+              data-testid="button-save"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <Save className="h-4 w-4 mr-1" />
+              )}
+              Save
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          {repo && (
+          {!isGuest && repo && (
             <button
               onClick={() => navigate("/repo-setup")}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
@@ -274,46 +299,30 @@ export default function IDE() {
               <span className="hidden md:inline">{repo.name}</span>
             </button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-gray-400 hover:text-white h-8"
-            data-testid="button-logout"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          {isGuest ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/")}
+              className="text-gray-400 hover:text-white h-8 text-xs gap-1"
+              data-testid="button-sign-in"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden md:inline">Sign in</span>
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-gray-400 hover:text-white h-8"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </header>
-
-      {status && (
-        <div className={`px-4 py-1 text-xs flex-shrink-0 ${
-          status.includes("Error") || status.includes("failed")
-            ? "bg-red-900/50 text-red-300"
-            : status === "Saved!"
-            ? "bg-green-900/50 text-green-300"
-            : "bg-blue-900/50 text-blue-300"
-        }`} data-testid="text-status">
-          {status}
-        </div>
-      )}
-
-      {showStdin && (
-        <div className="px-4 py-2 bg-[#2d2d30] border-b border-[#3c3c3c] flex-shrink-0" data-testid="stdin-panel">
-          <div className="flex items-center gap-2 mb-1">
-            <Keyboard className="h-3.5 w-3.5 text-yellow-400" />
-            <span className="text-xs text-yellow-400 font-medium">Standard Input (stdin)</span>
-            <span className="text-xs text-gray-500">- provide input for programs that read from keyboard</span>
-          </div>
-          <Textarea
-            value={stdinInput}
-            onChange={(e) => setStdinInput(e.target.value)}
-            placeholder="Enter input values here, one per line (e.g. 5.0)"
-            className="bg-[#1e1e1e] border-[#555] text-white text-sm font-mono h-16 resize-none"
-            data-testid="input-stdin"
-          />
-        </div>
-      )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden`}>
@@ -334,36 +343,64 @@ export default function IDE() {
             className="w-full flex items-center justify-between px-4 py-1.5 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-400 hover:text-white"
             data-testid="button-toggle-terminal"
           >
-            <span className="font-medium">Terminal Output</span>
+            <div className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5" />
+              <span className="font-medium">Terminal</span>
+            </div>
             {terminalOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
           </button>
         </div>
 
         {terminalOpen && (
-          <div className="h-64 bg-[#1a1a1a] border-t border-[#3c3c3c] overflow-auto flex-shrink-0" data-testid="terminal-panel">
-            {output ? (
-              <div className="p-3 font-mono text-xs space-y-2">
-                {output.stdout && (
-                  <div data-testid="terminal-stdout">
-                    <span className="text-gray-500">stdout:</span>
-                    <pre className="text-green-400 whitespace-pre-wrap mt-0.5">{output.stdout}</pre>
-                  </div>
-                )}
-                {output.stderr && (
-                  <div data-testid="terminal-stderr">
-                    <span className="text-gray-500">stderr:</span>
-                    <pre className="text-red-400 whitespace-pre-wrap mt-0.5">{output.stderr}</pre>
-                  </div>
-                )}
-                <div className="text-gray-500 border-t border-[#3c3c3c] pt-1 mt-2" data-testid="terminal-exit-info">
-                  Exit code: {output.exit_code} | Phase: {output.phase} | Status: {output.ok ? "OK" : "Error"}
+          <div className="h-72 bg-[#0d0d0d] border-t border-[#3c3c3c] flex flex-col flex-shrink-0" data-testid="terminal-panel">
+            <div className="flex-1 overflow-auto p-3 font-mono text-xs">
+              {terminalLines.map((line, i) => (
+                <div key={i} className={`leading-5 ${
+                  line.type === "stdout" ? "text-[#4ec9b0]" :
+                  line.type === "stderr" ? "text-[#f44747]" :
+                  line.type === "stdin" ? "text-[#dcdcaa]" :
+                  line.type === "system" ? "text-[#569cd6]" :
+                  "text-[#808080]"
+                }`} data-testid={`terminal-line-${i}`}>
+                  {line.type === "system" && <span className="text-[#808080] mr-1">{'>'}</span>}
+                  {line.text}
                 </div>
+              ))}
+              {running && (
+                <div className="flex items-center gap-2 text-[#808080] leading-5">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Running...</span>
+                </div>
+              )}
+              <div ref={terminalEndRef} />
+            </div>
+
+            <div className="border-t border-[#2d2d30] bg-[#1a1a1a] px-3 py-1.5 flex-shrink-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[#dcdcaa] text-xs font-mono select-none" data-testid="stdin-label">stdin {'>'} <span className="text-[#555]">input for your program (supports multiple lines)</span></span>
+                <Button
+                  onClick={handleRun}
+                  disabled={running || !code.trim()}
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-green-500"
+                  data-testid="button-run-terminal"
+                >
+                  <Play className="h-3 w-3 mr-1" />
+                  <span className="text-xs">Run</span>
+                </Button>
               </div>
-            ) : (
-              <div className="p-3 text-gray-500 text-xs font-mono" data-testid="terminal-placeholder">
-                Press Run (or Ctrl+Enter) to execute your code...
-              </div>
-            )}
+              <textarea
+                ref={stdinRef as any}
+                value={stdinInput}
+                onChange={(e) => setStdinInput(e.target.value)}
+                onKeyDown={handleStdinKeyDown}
+                placeholder="Type input values here (e.g. 5.0), one per line. Press Ctrl+Enter to run."
+                rows={2}
+                className="w-full bg-[#0d0d0d] border border-[#2d2d30] rounded text-white text-xs font-mono placeholder:text-[#555] p-2 resize-none focus:outline-none focus:border-[#569cd6]"
+                data-testid="input-stdin"
+              />
+            </div>
           </div>
         )}
       </div>

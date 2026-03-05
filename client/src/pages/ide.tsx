@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp, Keyboard } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { javascript } from "@codemirror/lang-javascript";
@@ -44,6 +45,8 @@ export default function IDE() {
   const [language, setLanguage] = useState<TargetLanguage>("c");
   const [filename, setFilename] = useState(defaultFilenames.c);
   const [code, setCode] = useState(defaultCode.c);
+  const [stdinInput, setStdinInput] = useState("");
+  const [showStdin, setShowStdin] = useState(false);
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [output, setOutput] = useState<RunResult | null>(null);
@@ -87,6 +90,7 @@ export default function IDE() {
           language,
           filename,
           code,
+          stdin: stdinInput || undefined,
         }),
       });
       const result: RunResult = await res.json();
@@ -246,6 +250,17 @@ export default function IDE() {
             )}
             Save
           </Button>
+
+          <Button
+            onClick={() => setShowStdin((prev) => !prev)}
+            size="sm"
+            variant="ghost"
+            className={`h-8 px-2 ${showStdin ? "text-yellow-400" : "text-gray-400"} hover:text-white`}
+            title="Toggle stdin input (for programs that read user input)"
+            data-testid="button-toggle-stdin"
+          >
+            <Keyboard className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -280,6 +295,23 @@ export default function IDE() {
             : "bg-blue-900/50 text-blue-300"
         }`} data-testid="text-status">
           {status}
+        </div>
+      )}
+
+      {showStdin && (
+        <div className="px-4 py-2 bg-[#2d2d30] border-b border-[#3c3c3c] flex-shrink-0" data-testid="stdin-panel">
+          <div className="flex items-center gap-2 mb-1">
+            <Keyboard className="h-3.5 w-3.5 text-yellow-400" />
+            <span className="text-xs text-yellow-400 font-medium">Standard Input (stdin)</span>
+            <span className="text-xs text-gray-500">- provide input for programs that read from keyboard</span>
+          </div>
+          <Textarea
+            value={stdinInput}
+            onChange={(e) => setStdinInput(e.target.value)}
+            placeholder="Enter input values here, one per line (e.g. 5.0)"
+            className="bg-[#1e1e1e] border-[#555] text-white text-sm font-mono h-16 resize-none"
+            data-testid="input-stdin"
+          />
         </div>
       )}
 

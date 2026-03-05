@@ -1,7 +1,7 @@
 # BM Compiler - Multi-Target Code Generation IDE
 
 ## Overview
-A web-based interactive compiler IDE for the MiniLang programming language, styled like VS Code. Named "BM Compiler". The compiler is implemented entirely in TypeScript and generates code for 4 target languages: C, C++, Java, and Python. Generated code can be executed directly in the built-in terminal.
+A web-based interactive compiler IDE for the MiniLang programming language, styled like VS Code. Named "BM Compiler". The compiler backend is implemented in **C using Flex (lexer) and Bison (parser)** — a real compiler pipeline. It generates code for 4 target languages: C, C++, Java, and Python. Generated code can be executed directly in the built-in terminal.
 
 ## Architecture
 
@@ -18,19 +18,27 @@ A web-based interactive compiler IDE for the MiniLang programming language, styl
 
 ### Backend (server/)
 - Express.js API server
-- `POST /api/compile` - Compiles MiniLang source to target language
+- `POST /api/compile` - Spawns the C compiler binary (`compiler/bmc`) via `execFile`, pipes source via stdin, reads JSON output
 - `POST /api/run` - Executes generated code (C/C++/Java/Python) with gcc/g++/javac/python3
 - `GET /api/examples` - Returns example programs
 - `POST /api/github/repos` - List user's GitHub repositories
 - `POST /api/github/create-repo` - Create a new GitHub repository
 - `POST /api/github/save-file` - Save/update a file in a GitHub repository
 
-### Compiler Pipeline (server/compiler/)
-1. **Lexer** (`lexer.ts`) - Tokenizes source code, tracks line/col
-2. **Parser** (`parser.ts`) - Recursive descent parser, builds AST with operator precedence
-3. **Semantic Analyzer** (`sema.ts`) - Type checking, scope management, variable resolution
-4. **IR Generator** (`ir.ts`) - Generates Three-Address Code (TAC) for visualization
-5. **Code Generator** (`codegen.ts`) - AST-based code generation for C, C++, Java, Python
+### C/Flex/Bison Compiler Pipeline (compiler/)
+The compiler is a native C binary built with Flex and Bison:
+1. **Lexer** (`lexer.l`) - Flex specification: tokenizes MiniLang source, tracks line/column positions
+2. **Parser** (`parser.y`) - Bison grammar: builds AST with full operator precedence, error recovery
+3. **AST** (`ast.h`, `ast.c`) - AST node types, constructors, memory management
+4. **Semantic Analyzer** (`sema.h`, `sema.c`) - Type checking, scope management, variable resolution, int-to-float promotion
+5. **IR Generator** (`ir.h`, `ir.c`) - Generates Three-Address Code (TAC) with labels for control flow
+6. **Code Generator** (`codegen.h`, `codegen.c`) - AST-based code generation for C, C++, Java, Python
+7. **Main** (`main.c`) - Entry point: reads from stdin, outputs JSON to stdout
+8. **Makefile** - Builds the `bmc` binary: `flex → lex.yy.c`, `bison → parser.tab.c/h`, then `gcc`
+
+Build: `cd compiler && make` produces `compiler/bmc`
+Usage: `echo 'int x = 42; print(x);' | ./compiler/bmc --target c --ir`
+Output: JSON with `{success, generatedCode, ir, errors, target}`
 
 ### Code Execution (server/runner.ts)
 - Compiles and runs generated code in temp directories
@@ -47,15 +55,16 @@ A web-based interactive compiler IDE for the MiniLang programming language, styl
 ### MiniLang Language
 - Types: `int`, `float`, `bool`, `string`
 - Statements: declarations, assignments, print, if/else, while
-- Expressions: arithmetic (+, -, *, /), comparison (==, !=, <, <=, >, >=)
+- Expressions: arithmetic (+, -, *, /), comparison (==, !=, <, <=, >, >=), logical (&&, ||)
 - Comments: `//` line, `/* */` block
-- Block scoping, implicit int-to-float promotion, string concatenation
+- Block scoping, implicit int-to-float promotion, string concatenation with +
 
 ## Key Files
+- `compiler/` - C/Flex/Bison compiler (lexer.l, parser.y, ast.c/h, sema.c/h, codegen.c/h, ir.c/h, main.c, Makefile)
+- `compiler/bmc` - Compiled binary (built from Makefile)
 - `shared/schema.ts` - Shared types and Zod schemas
-- `server/compiler/` - Complete compiler implementation
 - `server/runner.ts` - Code execution service
-- `server/routes.ts` - API endpoints
+- `server/routes.ts` - API endpoints (spawns compiler/bmc)
 - `client/src/pages/home.tsx` - Main VS Code-like IDE page
 - `client/src/lib/firebase.ts` - Firebase configuration
 - `client/src/hooks/use-auth.tsx` - Auth context and hook
@@ -63,6 +72,5 @@ A web-based interactive compiler IDE for the MiniLang programming language, styl
 ## Dependencies
 - CodeMirror 6 (`@uiw/react-codemirror`, `@codemirror/lang-javascript`, `@codemirror/theme-one-dark`)
 - Firebase (auth with GitHub provider)
-- @octokit/rest (GitHub API)
 - react-resizable-panels, Shadcn UI, TanStack Query, Wouter
-- System: gcc, g++, javac (JDK 21), python3
+- System: flex, bison, gcc, g++, javac (JDK 21), python3

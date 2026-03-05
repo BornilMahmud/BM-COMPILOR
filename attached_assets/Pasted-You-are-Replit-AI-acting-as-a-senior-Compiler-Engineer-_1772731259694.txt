@@ -1,0 +1,343 @@
+You are Replit AI acting as a senior Compiler Engineer + C systems programmer.
+
+BUILD A COMPLETE PROJECT: “MiniLang Multi-Target Compiler” using C + Flex + Bison.
+This is a REAL compiler for a custom language (MiniLang). Flex+Bison MUST be used for the compiler frontend (lexer+parser). The compiler must do: tokenize → parse → build AST → semantic analysis (symbol table + type checking) → generate IR (three-address code) → generate target code in C/C++/Java/Python → optionally compile/run the generated code.
+
+IMPORTANT: Deliver a working repository with correct build scripts. NO placeholders. NO missing files. Everything must compile with `make` inside Replit (Linux). If something isn’t available by default, add installation commands in README.
+
+========================
+1) PROJECT OUTPUT / FILES
+========================
+Create this exact structure:
+
+/
+  README.md
+  Makefile
+  examples/
+    hello.ml
+    loop.ml
+    cond.ml
+  src/
+    main.c
+    driver.c
+    driver.h
+    compiler.c
+    compiler.h
+    lexer.l
+    parser.y
+    ast.h
+    ast.c
+    sema.h
+    sema.c
+    symtab.h
+    symtab.c
+    ir.h
+    ir.c
+    codegen.h
+    codegen.c
+    gen_c.h
+    gen_c.c
+    gen_cpp.h
+    gen_cpp.c
+    gen_java.h
+    gen_java.c
+    gen_py.h
+    gen_py.c
+    runner.h
+    runner.c
+    util.h
+    util.c
+    errors.h
+    errors.c
+  build/   (created by Makefile)
+
+========================
+2) MINILANG LANGUAGE SPEC
+========================
+MiniLang is C-like with blocks:
+
+- Types: int, float, bool, string
+- Literals:
+  int: 123
+  float: 1.23
+  bool: true / false
+  string: "hello"
+- Statements end with ';'
+- Statements:
+  - declaration:
+      int a;
+      float b;
+      string s;
+      bool ok;
+  - declaration with initialization:
+      int a = 10;
+      float f = 2.5;
+      string s = "hi";
+      bool ok = true;
+  - assignment:
+      a = a + 1;
+  - print:
+      print(a);
+      print("text");
+      print(a + b);
+  - if/else:
+      if (a > 0) { print(a); } else { print(0); }
+  - while:
+      while (a > 0) { a = a - 1; }
+- Expressions:
+  - arithmetic: + - * / (int/float)
+  - comparison: == != < <= > >=  (results bool)
+  - parentheses supported
+- Comments:
+  // line comment
+  /* block comment */
+- Scoping: variables declared inside { } are block-scoped.
+
+TYPE RULES (semantic analysis must enforce):
+- numeric ops only on int/float
+- implicit int -> float allowed in expressions and assignments to float
+- string:
+  - allowed: string + string (concatenate)
+  - disallow: string * int etc
+- conditions in if/while must be bool (ONLY bool; no implicit numeric-to-bool)
+- cannot use undefined variables
+- cannot redeclare in same scope
+- print() accepts any type
+
+========================
+3) COMPILER FRONTEND USING FLEX + BISON (MANDATORY)
+========================
+A) FLEX (src/lexer.l)
+- Produce tokens for keywords, identifiers, literals, operators, punctuation.
+- Track line and column:
+  - maintain yylineno
+  - maintain a global column counter (increment with yyleng)
+  - update column on newline
+- On unknown char: lexical error with line/col.
+
+Tokens must include at least:
+T_INT T_FLOAT T_BOOL T_STRING
+T_IF T_ELSE T_WHILE T_PRINT
+T_TRUE T_FALSE
+T_ID
+T_INT_LIT T_FLOAT_LIT T_STRING_LIT
+T_ASSIGN (=)
+T_PLUS T_MINUS T_MUL T_DIV
+T_EQ T_NEQ T_LT T_LTE T_GT T_GTE
+T_LPAREN T_RPAREN T_LBRACE T_RBRACE
+T_SEMI
+
+B) BISON (src/parser.y)
+- Build an AST (do NOT directly codegen here).
+- Implement operator precedence:
+  * and / higher than + and -
+  comparisons lower precedence than arithmetic
+- Provide good syntax error messages with line/col and near token.
+- Grammar must support blocks { stmt_list }
+
+========================
+4) AST + SEMANTIC ANALYSIS
+========================
+AST (ast.h/ast.c)
+- Define node types for:
+  - program
+  - block
+  - declarations
+  - assignments
+  - print
+  - if/else
+  - while
+  - binary ops
+  - literals
+  - variable refs
+- Each AST node stores line/col for error reporting.
+
+Symbol Table (symtab.h/symtab.c)
+- Support nested scopes via stack of hash tables or linked lists.
+- Operations: enter_scope, exit_scope, declare(name,type), lookup(name).
+- Detect redeclaration in same scope.
+
+Semantic Analyzer (sema.h/sema.c)
+- Walk AST.
+- Assign expression types.
+- Enforce type rules.
+- Produce semantic errors with line/col and stop compilation if any.
+
+========================
+5) IR (THREE ADDRESS CODE)
+========================
+IR (ir.h/ir.c)
+- Convert AST into TAC instructions list.
+- Use temporaries: t1, t2...
+- Use labels: L1, L2...
+- Instruction kinds:
+  - TAC_LABEL
+  - TAC_GOTO
+  - TAC_IF_FALSE_GOTO
+  - TAC_ASSIGN
+  - TAC_BINOP
+  - TAC_PRINT
+- For comparisons produce bool temporaries.
+- Store IR in memory and also allow printing IR with `--emit-ir`.
+
+========================
+6) CODE GENERATION (4 TARGETS)
+========================
+codegen.c dispatches to:
+- gen_c.c
+- gen_cpp.c
+- gen_java.c
+- gen_py.c
+
+Each generator:
+- Inputs: IR + symbol table info
+- Outputs: a complete runnable program file.
+
+TARGET DETAILS:
+A) C target:
+- #include <stdio.h>
+- use main()
+- declare variables at top of main with correct C types:
+  int, double, int for bool, and char* for string
+- For strings:
+  - Keep it simple: allow only string literals and printing strings.
+  - For string concatenation: implement minimal helper using dynamic buffer OR restrict concat and document in README.
+  - Still must compile.
+- Print:
+  - int: printf("%d\n", x)
+  - float: printf("%g\n", x)
+  - bool: printf("%s\n", x ? "true":"false")
+  - string: printf("%s\n", s)
+
+B) C++ target:
+- #include <iostream>
+- use std::string for strings, bool native
+- print with std::cout << ... << std::endl
+
+C) Java target:
+- public class Out { public static void main(String[] args) { ... } }
+- types:
+  int, double, boolean, String
+- print: System.out.println(...)
+- Ensure file name is Out.java
+
+D) Python target:
+- output valid python3 script
+- print(...) statements
+- while/if blocks with indentation
+- variables assigned naturally
+- booleans True/False
+
+========================
+7) RUNNER (COMPILE + RUN GENERATED CODE)
+========================
+runner.c/runner.h
+- No system() allowed.
+- Use fork(), execvp(), pipes, waitpid().
+- Capture stdout/stderr of toolchain compile and program run.
+- Support optional stdin from a file: --stdin <file>
+- Provide time limit: default 2 seconds, configurable --time <sec> (use alarm or watchdog; kill child if exceeded).
+- Return codes:
+  1 lex/parse error
+  2 semantic error
+  3 codegen error
+  4 toolchain compile error
+  5 runtime error/timeout
+
+Toolchain commands:
+- C: gcc out.c -O2 -std=c11 -o a.out
+- C++: g++ out.cpp -O2 -std=c++17 -o a.out
+- Java: javac Out.java then java Out
+- Python: python3 out.py
+
+Run must happen inside a temp directory:
+  /tmp/minilangc_<pid>_<timestamp>
+Cleanup after run unless --keep.
+
+========================
+8) CLI (USER INTERFACE)
+========================
+Binary name: minilangc
+
+Usage:
+  ./minilangc <input.ml> --target c|cpp|java|py [--out <file>] [--run] [--stdin <file>] [--time <sec>] [--emit-ir] [--keep]
+
+Behavior:
+- Always compile MiniLang -> target code.
+- If --emit-ir, print the TAC to stdout.
+- If --out not provided:
+  c -> out.c
+  cpp -> out.cpp
+  java -> Out.java
+  py -> out.py
+- If --run provided, generate into temp dir and compile/run via runner; print stdout/stderr and exit code.
+
+Output a final structured summary after --run:
+{
+  "target":"cpp",
+  "compiled":true,
+  "exit_code":0,
+  "stdout":"...",
+  "stderr":"..."
+}
+
+========================
+9) EXAMPLES (MUST WORK)
+========================
+examples/hello.ml:
+int a = 10;
+int b = 20;
+print(a + b);
+
+examples/loop.ml:
+int x = 3;
+while (x > 0) {
+  print(x);
+  x = x - 1;
+}
+
+examples/cond.ml:
+float f = 2.5;
+if (f >= 2.0) {
+  print("ok");
+} else {
+  print("no");
+}
+
+All 3 examples must work for ALL targets: c, cpp, java, py.
+
+========================
+10) MAKEFILE + README (MUST BE CORRECT)
+========================
+Makefile must:
+- generate build/lexer.c from src/lexer.l using flex
+- generate build/parser.c + build/parser.h from src/parser.y using bison -d
+- compile all src/*.c + generated parser/lexer into ./minilangc
+- provide:
+  make
+  make clean
+  make test   (runs examples for all targets quickly)
+
+README.md must include:
+- Install dependencies (flex, bison, gcc, g++, javac/java, python3) with commands for Debian/Ubuntu if needed.
+- Build instructions: make
+- Run instructions with exact commands:
+  ./minilangc examples/hello.ml --target c --run
+  ./minilangc examples/hello.ml --target cpp --run
+  ./minilangc examples/hello.ml --target java --run
+  ./minilangc examples/hello.ml --target py --run
+- Show expected output for examples
+- Document any limitations clearly (especially string concat in C target).
+
+========================
+11) CODING QUALITY RULES
+========================
+- No missing includes, no undefined references.
+- Keep code readable with comments.
+- Keep error messages clear with line/col.
+- Do not hardcode Replit paths except /tmp.
+- Do not use system().
+- Ensure `make` succeeds with no manual edits.
+
+NOW DO THE WORK
+Generate the complete content of every file listed above (Makefile + README + all .c/.h + lexer.l + parser.y + example .ml files). Ensure the repository builds and the compiler runs end-to-end in Replit.

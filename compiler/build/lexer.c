@@ -492,7 +492,6 @@ char *yytext;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ast.h"
 #include "parser.h"
 
 int yycolumn = 1;
@@ -525,8 +524,8 @@ static char *unescape_string(const char *s) {
     result[j] = '\0';
     return result;
 }
+#line 527 "build/lexer.c"
 #line 528 "build/lexer.c"
-#line 529 "build/lexer.c"
 
 #define INITIAL 0
 
@@ -743,10 +742,10 @@ YY_DECL
 		}
 
 	{
-#line 43 "src/bm_script_lexer.l"
+#line 42 "src/bm_script_lexer.l"
 
 
-#line 749 "build/lexer.c"
+#line 748 "build/lexer.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -815,67 +814,67 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 45 "src/bm_script_lexer.l"
+#line 44 "src/bm_script_lexer.l"
 { }
 	YY_BREAK
 case 2:
 /* rule 2 can match eol */
 YY_RULE_SETUP
-#line 46 "src/bm_script_lexer.l"
+#line 45 "src/bm_script_lexer.l"
 { yycolumn = 1; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 47 "src/bm_script_lexer.l"
+#line 46 "src/bm_script_lexer.l"
 { }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 49 "src/bm_script_lexer.l"
+#line 48 "src/bm_script_lexer.l"
 { return T_LANG; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 50 "src/bm_script_lexer.l"
+#line 49 "src/bm_script_lexer.l"
 { return T_FILE; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 51 "src/bm_script_lexer.l"
+#line 50 "src/bm_script_lexer.l"
 { return T_RUN; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 52 "src/bm_script_lexer.l"
+#line 51 "src/bm_script_lexer.l"
 { return T_STDIN; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 53 "src/bm_script_lexer.l"
+#line 52 "src/bm_script_lexer.l"
 { return T_SEMI; }
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 55 "src/bm_script_lexer.l"
+#line 54 "src/bm_script_lexer.l"
 { yylval.sval = unescape_string(yytext); return T_STRING; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 57 "src/bm_script_lexer.l"
+#line 56 "src/bm_script_lexer.l"
 { yylval.sval = strdup(yytext); return T_IDENT; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 59 "src/bm_script_lexer.l"
+#line 58 "src/bm_script_lexer.l"
 { fprintf(stderr, "Lexer error at line %d col %d: unexpected '%s'\n", yylineno, yycolumn - yyleng, yytext); }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 61 "src/bm_script_lexer.l"
+#line 60 "src/bm_script_lexer.l"
 ECHO;
 	YY_BREAK
-#line 878 "build/lexer.c"
+#line 877 "build/lexer.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1892,6 +1891,6 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 61 "src/bm_script_lexer.l"
+#line 60 "src/bm_script_lexer.l"
 
 

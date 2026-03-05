@@ -26,8 +26,8 @@ A web-based online compiler and code runner with GitHub integration. The compile
   - `POST /api/github/createRepo` - Create new repo
   - `POST /api/github/commit` - Save/update file in repo via GitHub API commit
 
-### C/Flex/Bison Compiler Core (compiler/)
-Binary: `compiler/bmcc` - Built with Flex and Bison.
+### Compiler Core (compiler/) — Built with ONLY Flex + Bison
+Binary: `compiler/bmcc` — entire compiler built using **only** Flex (.l) and Bison (.y) files.
 
 **BM Script DSL** (parsed by Flex+Bison):
 ```
@@ -37,19 +37,16 @@ STDIN "optional input";
 RUN;
 ```
 
-Pipeline:
-1. `driver.c` builds BM Script text from CLI args (`--lang`, `--file`, `--run`, `--stdin-text`, `--json`)
-2. `bm_script_lexer.l` (Flex) tokenizes: LANG, FILE, RUN, STDIN, STRING, IDENT, SEMI
-3. `bm_script_parser.y` (Bison) parses into BMJob struct (AST)
-4. `runner.c` executes the job using fork/execvp with pipes:
-   - C: gcc → run
-   - C++: g++ → run
-   - Java: javac → java
-   - Python: python3
-5. Outputs JSON: `{ok, exit_code, stdout, stderr, phase}`
+**Architecture** (only 2 source files):
+- `bm_script_lexer.l` (Flex) — tokenizer: LANG, FILE, RUN, STDIN, STRING, IDENT, SEMI
+- `bm_script_parser.y` (Bison) — contains everything:
+  - Grammar rules (parse BM Script into BMJob struct)
+  - Runner logic (fork/execvp with pipes for C/C++/Java/Python)
+  - JSON output, utility functions
+  - `main()` function (CLI args → BM Script → parse → execute)
 
+**Supported languages**: C (gcc), C++ (g++), Java (javac+java), Python (python3)
 **Safety**: fork/execvp (no system()), alarm() timeout (5s), pipe-based I/O capture
-
 **Build**: `cd compiler && make` → produces `compiler/bmcc`
 
 ### Source Files
@@ -57,12 +54,8 @@ Pipeline:
 compiler/
   Makefile
   src/
-    bm_script_lexer.l    # Flex lexer specification
-    bm_script_parser.y   # Bison parser grammar
-    ast.h / ast.c        # BMJob struct (AST)
-    driver.c / driver.h  # Main entry, CLI args → BM Script → parse → run
-    runner.c / runner.h  # fork/exec runner with pipes
-    util.c / util.h      # JSON escaping utilities
+    bm_script_lexer.l    # Flex lexer — tokenization only
+    bm_script_parser.y   # Bison parser — grammar + runner + main + utilities
 ```
 
 ### Authentication

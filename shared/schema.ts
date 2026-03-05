@@ -1,18 +1,49 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const targetLanguages = ['c', 'cpp', 'java', 'py'] as const;
+export type TargetLanguage = typeof targetLanguages[number];
+
+export const compileRequestSchema = z.object({
+  source: z.string().min(1),
+  target: z.enum(targetLanguages),
+  emitIr: z.boolean().optional().default(false),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export interface CompilerError {
+  line: number;
+  column: number;
+  message: string;
+  phase: 'lexer' | 'parser' | 'semantic';
+}
+
+export interface CompileResult {
+  success: boolean;
+  generatedCode: string;
+  ir: string;
+  errors: CompilerError[];
+  target: TargetLanguage;
+  tokens?: { type: string; value: string; line: number; col: number }[];
+}
+
+export interface Example {
+  name: string;
+  filename: string;
+  source: string;
+  description: string;
+}
+
+export const targetLabels: Record<TargetLanguage, string> = {
+  c: 'C',
+  cpp: 'C++',
+  java: 'Java',
+  py: 'Python',
+};
+
+export const targetFileExtensions: Record<TargetLanguage, string> = {
+  c: '.c',
+  cpp: '.cpp',
+  java: '.java',
+  py: '.py',
+};

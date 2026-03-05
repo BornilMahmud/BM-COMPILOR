@@ -826,7 +826,7 @@ export default function Home() {
     );
   };
 
-  const RepoDialog = () => (
+  const repoDialogContent = (
     <Dialog open={showRepoDialog} onOpenChange={setShowRepoDialog}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -1041,7 +1041,7 @@ export default function Home() {
           <span className="font-mono">BM Compiler</span>
         </div>
 
-        <RepoDialog />
+        {repoDialogContent}
       </div>
     );
   }
@@ -1115,7 +1115,7 @@ export default function Home() {
       </div>
 
       <StatusBar />
-      <RepoDialog />
+      {repoDialogContent}
     </div>
   );
 }

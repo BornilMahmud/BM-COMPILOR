@@ -258,7 +258,20 @@ export default function Home() {
     return true;
   });
   const { toast } = useToast();
-  const { user, loading: authLoading, githubToken, login, logout } = useAuth();
+  const { user, loading: authLoading, githubToken, loginError, login, logout } = useAuth();
+
+  const handleLogin = useCallback(async () => {
+    try {
+      await login();
+    } catch {
+    }
+  }, [login]);
+
+  useEffect(() => {
+    if (loginError) {
+      toast({ title: "Login Error", description: loginError, variant: "destructive" });
+    }
+  }, [loginError, toast]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -517,7 +530,7 @@ export default function Home() {
             </button>
           ) : (
             <button
-              onClick={login}
+              onClick={handleLogin}
               disabled={authLoading}
               className="w-12 h-11 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground transition-colors mb-1"
               data-testid="button-login"
@@ -924,7 +937,7 @@ export default function Home() {
                 <LogOut className="w-4 h-4" />
               </button>
             ) : (
-              <button onClick={login} className="p-1.5 text-muted-foreground" data-testid="button-login">
+              <button onClick={handleLogin} className="p-1.5 text-muted-foreground" data-testid="button-login">
                 <Github className="w-4 h-4" />
               </button>
             )}

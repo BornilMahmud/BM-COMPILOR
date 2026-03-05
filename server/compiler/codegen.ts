@@ -242,7 +242,7 @@ export function generateCpp(ast: ProgramNode): string {
 
 export function generateJava(ast: ProgramNode): string {
   const lines: string[] = [];
-  lines.push('public class Out {');
+  lines.push('public class Main {');
   lines.push('    public static void main(String[] args) {');
 
   function emitStmt(stmt: StmtNode, indent: number): void {

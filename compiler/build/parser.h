@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_PARSER_TAB_H_INCLUDED
-# define YY_YY_PARSER_TAB_H_INCLUDED
+#ifndef YY_YY_BUILD_PARSER_H_INCLUDED
+# define YY_YY_BUILD_PARSER_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -54,26 +54,13 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    T_INT_LIT = 258,               /* T_INT_LIT  */
-    T_TRUE = 259,                  /* T_TRUE  */
-    T_FALSE = 260,                 /* T_FALSE  */
-    T_FLOAT_LIT = 261,             /* T_FLOAT_LIT  */
-    T_STRING_LIT = 262,            /* T_STRING_LIT  */
-    T_IDENT = 263,                 /* T_IDENT  */
-    T_INT = 264,                   /* T_INT  */
-    T_FLOAT = 265,                 /* T_FLOAT  */
-    T_BOOL = 266,                  /* T_BOOL  */
-    T_STRING = 267,                /* T_STRING  */
-    T_IF = 268,                    /* T_IF  */
-    T_ELSE = 269,                  /* T_ELSE  */
-    T_WHILE = 270,                 /* T_WHILE  */
-    T_PRINT = 271,                 /* T_PRINT  */
-    T_EQ = 272,                    /* T_EQ  */
-    T_NEQ = 273,                   /* T_NEQ  */
-    T_LE = 274,                    /* T_LE  */
-    T_GE = 275,                    /* T_GE  */
-    T_AND = 276,                   /* T_AND  */
-    T_OR = 277                     /* T_OR  */
+    T_STRING = 258,                /* T_STRING  */
+    T_IDENT = 259,                 /* T_IDENT  */
+    T_LANG = 260,                  /* T_LANG  */
+    T_FILE = 261,                  /* T_FILE  */
+    T_RUN = 262,                   /* T_RUN  */
+    T_STDIN = 263,                 /* T_STDIN  */
+    T_SEMI = 264                   /* T_SEMI  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -82,17 +69,11 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 51 "parser.y"
+#line 22 "src/bm_script_parser.y"
 
-    int ival;
-    double fval;
     char *sval;
-    ASTNode *node;
-    NodeList *list;
-    DataType dtype;
-    BinOp binop;
 
-#line 96 "parser.tab.h"
+#line 77 "build/parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -121,4 +102,4 @@ extern YYLTYPE yylloc;
 int yyparse (void);
 
 
-#endif /* !YY_YY_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_YY_BUILD_PARSER_H_INCLUDED  */

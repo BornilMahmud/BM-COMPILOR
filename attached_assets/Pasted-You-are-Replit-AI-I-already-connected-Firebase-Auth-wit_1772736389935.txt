@@ -1,0 +1,233 @@
+You are Replit AI. I already connected Firebase Auth with GitHub provider (login works). Now build the rest of my project as a complete, working web app + compiler core.
+
+PROJECT NAME
+BM COMPILER (online compiler/runner + GitHub repo saving)
+
+MANDATORY REQUIREMENT
+The compiler core MUST be written in C using Flex + Bison (lexer.l + parser.y) and compiled into a binary named `bmcc`. This is the graded “compiler design” part.
+
+HIGH-LEVEL ARCHITECTURE
+A) Frontend (Web UI)
+- Login via Firebase GitHub Auth (already set up; DO NOT redo auth, just use current Firebase config).
+- After login: show a “Repo Setup” page (Create repo or Select existing).
+- After repo selected/created: open “IDE” page with:
+  - Code editor
+  - Language selector: C / C++ / Java / Python
+  - File name input (default main.c / main.cpp / Main.java / main.py)
+  - Buttons: Run, Save to GitHub (Commit)
+  - Terminal output panel (stdout + stderr)
+  - Status to show “Saved / Running / Error”
+
+B) Backend (API Server)
+- Node.js + Express (recommended for GitHub REST API + running bmcc binary)
+- Responsibilities:
+  1) Verify Firebase ID token from frontend
+  2) Use GitHub token (obtained from Firebase login) to call GitHub API
+  3) Create/select repo
+  4) Read/write files in repo via GitHub API commits
+  5) Run compile/execute via the C compiler core binary `bmcc` and return JSON output
+
+C) Compiler Core (C + Flex + Bison)
+- Build a binary `bmcc` that:
+  - Accepts the chosen language (c/cpp/java/py) and source code file path
+  - Runs a “MiniLang parser” (Flex+Bison) to demonstrate compiler concepts
+  - Also provides a safe runner to compile/run code and return stdout/stderr
+IMPORTANT: To satisfy the course requirement, bmcc must include Flex+Bison parsing of a simple DSL command script (BM Script). The DSL drives compilation tasks.
+
+========================
+1) REPO STRUCTURE (CREATE EXACTLY)
+========================
+/
+  README.md
+  package.json
+  server/
+    index.js
+    firebaseAdmin.js
+    github.js
+    run.js
+    middlewareAuth.js
+  compiler/
+    Makefile
+    src/
+      bm_script_lexer.l
+      bm_script_parser.y
+      ast.h ast.c
+      driver.c driver.h
+      runner.c runner.h
+      util.c util.h
+  web/
+    index.html
+    vite.config.js (or simple webpack; choose Vite)
+    src/
+      main.jsx
+      firebase.js
+      api.js
+      pages/
+        Login.jsx
+        RepoSetup.jsx
+        IDE.jsx
+      components/
+        Editor.jsx
+        Terminal.jsx
+        RepoPicker.jsx
+      styles.css
+
+========================
+2) FRONTEND REQUIREMENTS (WEB)
+========================
+A) Auth usage
+- Use my existing Firebase config in web/src/firebase.js (create file, but keep values as placeholders and document where to paste).
+- Sign in with GitHub provider using Firebase Auth.
+- After sign-in, obtain:
+  - Firebase ID token (user.getIdToken())
+  - GitHub OAuth access token from Firebase credential (GithubAuthProvider.credentialFromResult(result).accessToken)
+- Store tokens in memory (and optionally localStorage). Never expose secrets.
+
+B) Repo Setup Page
+- UI: “Create new repo” OR “Select existing repo”
+- Create repo fields: repoName, visibility (public/private)
+- Select repo: load repos list using backend endpoint.
+- After repo chosen: go to IDE page.
+
+C) IDE Page
+- Monaco editor or CodeMirror (choose CodeMirror if simpler). Must work in Replit.
+- Language dropdown: c / cpp / java / py
+- File name input updates default based on language:
+  - c -> main.c
+  - cpp -> main.cpp
+  - java -> Out.java or Main.java (pick Out.java to match backend)
+  - py -> main.py
+- Buttons:
+  1) RUN: calls backend /api/run
+  2) SAVE: calls backend /api/github/commit to write file into repo with commit message
+- Terminal panel shows:
+  - stdout
+  - stderr
+  - exit code
+  - compile errors (if any)
+
+Frontend must call backend with headers:
+- Authorization: Bearer <FIREBASE_ID_TOKEN>
+- X-GitHub-Token: <GITHUB_ACCESS_TOKEN>
+
+========================
+3) BACKEND REQUIREMENTS (NODE + EXPRESS)
+========================
+A) Authentication middleware (server/middlewareAuth.js)
+- Verify Firebase ID token using Firebase Admin SDK.
+- Reject if invalid.
+
+B) GitHub API helpers (server/github.js)
+Use GitHub REST API with the user’s GitHub token (from header X-GitHub-Token):
+- List repos: GET /user/repos
+- Create repo: POST /user/repos
+- Get file content: GET /repos/{owner}/{repo}/contents/{path}
+- Create/update file (commit): PUT /repos/{owner}/{repo}/contents/{path}
+  - Base64 encode content
+  - Use SHA when updating
+  - Include commit message
+
+C) Run endpoint (server/run.js)
+POST /api/run
+Body:
+{
+  "language":"c|cpp|java|py",
+  "filename":"main.c",
+  "code":"...source...",
+  "stdin":"optional input text"
+}
+Process:
+- Create temp directory: /tmp/bmcompiler_<uid>_<timestamp>
+- Write code file there
+- Call compiler binary: ./compiler/bmcc with args like:
+  ./compiler/bmcc --lang c --file /tmp/.../main.c --run --stdin-text "...." --json
+- Capture stdout/stderr and return JSON to frontend:
+{
+  "ok":true/false,
+  "exit_code":0,
+  "stdout":"...",
+  "stderr":"...",
+  "phase":"compile|run|bm_script_parse"
+}
+- Enforce time limit (2-5 seconds) and prevent command injection:
+  - Use spawn with args array, never system()
+  - Kill process if timeout
+
+D) API routes (server/index.js)
+Implement:
+- GET /api/health
+- GET /api/github/repos
+- POST /api/github/createRepo
+- POST /api/github/commit
+- POST /api/run
+
+========================
+4) MANDATORY C + FLEX + BISON COMPILER CORE (compiler/bmcc)
+========================
+To satisfy “C + Flex + Bison” in this web project, bmcc must include a small compiler frontend built with Flex+Bison:
+- Implement a tiny DSL called “BM Script” that describes a run job.
+
+BM Script example (generated internally by bmcc or accepted as file):
+  LANG c;
+  FILE "main.c";
+  RUN;
+
+or
+  LANG py;
+  FILE "main.py";
+  STDIN "hello\n";
+  RUN;
+
+Flex (bm_script_lexer.l):
+- tokens: LANG, FILE, RUN, STDIN, STRING, IDENT, SEMI
+
+Bison (bm_script_parser.y):
+- grammar parses the script and builds a small AST/job struct.
+
+bmcc must:
+1) Build BM Script text from CLI args (language/file/stdin)
+2) Parse it using Flex+Bison
+3) If parse ok, execute the job:
+   - For c: gcc file -o a.out then run
+   - For cpp: g++ file -o a.out then run
+   - For java: javac Out.java then java Out
+   - For py: python3 file
+4) Capture stdout/stderr, exit code
+5) Output JSON when --json is passed.
+
+IMPORTANT SAFETY IN bmcc:
+- Use fork/execvp + pipes in runner.c
+- Apply timeout (alarm or watchdog)
+- Run inside the temp directory only
+- No system()
+
+Compiler/Makefile must build:
+- flex -> build/lexer.c
+- bison -> build/parser.c + build/parser.h
+- gcc to produce ../bmcc
+
+========================
+5) README INSTRUCTIONS (MUST INCLUDE)
+========================
+- How to install deps in Replit (flex, bison, gcc, g++, openjdk, python3)
+- How to build:
+  (1) cd compiler && make
+  (2) cd .. && npm install
+  (3) npm run dev (or node server/index.js + vite web)
+- How to run tests:
+  - Call /api/run with sample code
+- How GitHub saving works (API commit)
+- Where to paste Firebase config values
+
+========================
+6) OUTPUT QUALITY REQUIREMENTS
+========================
+- The app must run end-to-end:
+  login -> repo setup -> editor -> run -> terminal output -> save commit to GitHub
+- Clear errors for missing tokens or invalid GitHub token
+- No placeholders in logic; only placeholders allowed are Firebase config keys.
+- Keep UI clean and simple, Facebook-like minimal blue style.
+- Provide default BM logo as a simple blue rounded square with “BM” (no extra text).
+
+NOW IMPLEMENT EVERYTHING
+Generate the full code for ALL files listed in the structure, with correct imports, correct API routes, and correct Makefile. Ensure it works in Replit.

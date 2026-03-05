@@ -1,76 +1,83 @@
-# BM Compiler - Multi-Target Code Generation IDE
+# BM Compiler - Online Compiler & Code Runner
 
 ## Overview
-A web-based interactive compiler IDE for the MiniLang programming language, styled like VS Code. Named "BM Compiler". The compiler backend is implemented in **C using Flex (lexer) and Bison (parser)** — a real compiler pipeline. It generates code for 4 target languages: C, C++, Java, and Python. Generated code can be executed directly in the built-in terminal.
+A web-based online compiler and code runner with GitHub integration. The compiler core (`bmcc`) is built in **C using Flex (lexer) and Bison (parser)** to satisfy compiler design course requirements. It uses a BM Script DSL internally to drive compilation/execution tasks. Supports C, C++, Java, and Python code execution.
 
 ## Architecture
 
 ### Frontend (client/)
-- React + TypeScript SPA with VS Code-like layout
-- CodeMirror 6 code editor with syntax highlighting and dark/light themes
-- Activity bar, file explorer sidebar, editor tabs, toolbar
-- Resizable bottom panel: Problems, Output, IR, Terminal tabs
-- Terminal panel with PowerShell/Bash shell style options, shows code execution results
-- Full mobile responsive layout with tab-based navigation
-- Dark/light mode with localStorage persistence
-- Firebase GitHub authentication (login/logout in activity bar)
-- GitHub repository integration (create repos, save files to GitHub)
+- React + TypeScript SPA with 3 pages:
+  - **Login** (`/`) - Firebase GitHub OAuth sign-in
+  - **Repo Setup** (`/repo-setup`) - Create or select GitHub repository
+  - **IDE** (`/ide`) - Code editor, language selector, filename input, Run/Save buttons, terminal output
+- Uses CodeMirror 6 for code editing (C/C++/Java/Python syntax)
+- Dark theme UI styled with Tailwind CSS
+- Auth via Firebase GitHub provider (existing setup)
+- GitHub token passed in `X-GitHub-Token` header
 
 ### Backend (server/)
 - Express.js API server
-- `POST /api/compile` - Spawns the C compiler binary (`compiler/bmc`) via `execFile`, pipes source via stdin, reads JSON output
-- `POST /api/run` - Executes generated code (C/C++/Java/Python) with gcc/g++/javac/python3
-- `GET /api/examples` - Returns example programs
-- `POST /api/github/repos` - List user's GitHub repositories
-- `POST /api/github/create-repo` - Create a new GitHub repository
-- `POST /api/github/save-file` - Save/update a file in a GitHub repository
+- Routes:
+  - `GET /api/health` - Health check
+  - `POST /api/run` - Executes code via `bmcc` binary: `{language, filename, code, stdin?}` → `{ok, exit_code, stdout, stderr, phase}`
+  - `GET /api/github/repos` - List user repos (requires X-GitHub-Token)
+  - `POST /api/github/createRepo` - Create new repo
+  - `POST /api/github/commit` - Save/update file in repo via GitHub API commit
 
-### C/Flex/Bison Compiler Pipeline (compiler/)
-The compiler is a native C binary built with Flex and Bison:
-1. **Lexer** (`lexer.l`) - Flex specification: tokenizes MiniLang source, tracks line/column positions
-2. **Parser** (`parser.y`) - Bison grammar: builds AST with full operator precedence, error recovery
-3. **AST** (`ast.h`, `ast.c`) - AST node types, constructors, memory management
-4. **Semantic Analyzer** (`sema.h`, `sema.c`) - Type checking, scope management, variable resolution, int-to-float promotion
-5. **IR Generator** (`ir.h`, `ir.c`) - Generates Three-Address Code (TAC) with labels for control flow
-6. **Code Generator** (`codegen.h`, `codegen.c`) - AST-based code generation for C, C++, Java, Python
-7. **Main** (`main.c`) - Entry point: reads from stdin, outputs JSON to stdout
-8. **Makefile** - Builds the `bmc` binary: `flex → lex.yy.c`, `bison → parser.tab.c/h`, then `gcc`
+### C/Flex/Bison Compiler Core (compiler/)
+Binary: `compiler/bmcc` - Built with Flex and Bison.
 
-Build: `cd compiler && make` produces `compiler/bmc`
-Usage: `echo 'int x = 42; print(x);' | ./compiler/bmc --target c --ir`
-Output: JSON with `{success, generatedCode, ir, errors, target}`
+**BM Script DSL** (parsed by Flex+Bison):
+```
+LANG c;
+FILE "main.c";
+STDIN "optional input";
+RUN;
+```
 
-### Code Execution (server/runner.ts)
-- Compiles and runs generated code in temp directories
-- Supports C (gcc), C++ (g++), Java (javac/java), Python (python3)
-- 5-second execution timeout, max 3 concurrent runs, output size limits
-- Automatic cleanup of temp files
+Pipeline:
+1. `driver.c` builds BM Script text from CLI args (`--lang`, `--file`, `--run`, `--stdin-text`, `--json`)
+2. `bm_script_lexer.l` (Flex) tokenizes: LANG, FILE, RUN, STDIN, STRING, IDENT, SEMI
+3. `bm_script_parser.y` (Bison) parses into BMJob struct (AST)
+4. `runner.c` executes the job using fork/execvp with pipes:
+   - C: gcc → run
+   - C++: g++ → run
+   - Java: javac → java
+   - Python: python3
+5. Outputs JSON: `{ok, exit_code, stdout, stderr, phase}`
+
+**Safety**: fork/execvp (no system()), alarm() timeout (5s), pipe-based I/O capture
+
+**Build**: `cd compiler && make` → produces `compiler/bmcc`
+
+### Source Files
+```
+compiler/
+  Makefile
+  src/
+    bm_script_lexer.l    # Flex lexer specification
+    bm_script_parser.y   # Bison parser grammar
+    ast.h / ast.c        # BMJob struct (AST)
+    driver.c / driver.h  # Main entry, CLI args → BM Script → parse → run
+    runner.c / runner.h  # fork/exec runner with pipes
+    util.c / util.h      # JSON escaping utilities
+```
 
 ### Authentication
 - Firebase with GitHub OAuth provider (`client/src/lib/firebase.ts`)
-- Auth context/hook (`client/src/hooks/use-auth.tsx`)
-- GitHub token stored in localStorage for repo operations
+- Auth context (`client/src/hooks/use-auth.tsx`)
+- GitHub token stored in localStorage, sent as `X-GitHub-Token` header
 - Secrets: VITE_FIREBASE_API_KEY, VITE_FIREBASE_APP_ID, VITE_FIREBASE_PROJECT_ID
 
-### MiniLang Language
-- Types: `int`, `float`, `bool`, `string`
-- Statements: declarations, assignments, print, if/else, while
-- Expressions: arithmetic (+, -, *, /), comparison (==, !=, <, <=, >, >=), logical (&&, ||)
-- Comments: `//` line, `/* */` block
-- Block scoping, implicit int-to-float promotion, string concatenation with +
-
-## Key Files
-- `compiler/` - C/Flex/Bison compiler (lexer.l, parser.y, ast.c/h, sema.c/h, codegen.c/h, ir.c/h, main.c, Makefile)
-- `compiler/bmc` - Compiled binary (built from Makefile)
-- `shared/schema.ts` - Shared types and Zod schemas
-- `server/runner.ts` - Code execution service
-- `server/routes.ts` - API endpoints (spawns compiler/bmc)
-- `client/src/pages/home.tsx` - Main VS Code-like IDE page
-- `client/src/lib/firebase.ts` - Firebase configuration
-- `client/src/hooks/use-auth.tsx` - Auth context and hook
+### Key Frontend Files
+- `client/src/pages/login.tsx` - Login page
+- `client/src/pages/repo-setup.tsx` - Repo selection/creation
+- `client/src/pages/ide.tsx` - Main IDE with editor & terminal
+- `client/src/App.tsx` - Router (/, /repo-setup, /ide)
 
 ## Dependencies
-- CodeMirror 6 (`@uiw/react-codemirror`, `@codemirror/lang-javascript`, `@codemirror/theme-one-dark`)
+- CodeMirror 6 (@uiw/react-codemirror, lang-cpp, lang-java, lang-python)
 - Firebase (auth with GitHub provider)
-- react-resizable-panels, Shadcn UI, TanStack Query, Wouter
-- System: flex, bison, gcc, g++, javac (JDK 21), python3
+- react-icons (GitHub logo)
+- Shadcn UI, TanStack Query, Wouter
+- System: flex, bison, gcc, g++, javac (JDK), python3

@@ -1,29 +1,33 @@
 CC = gcc
-CFLAGS = -Wall -Wno-unused-function -g
+CFLAGS = -Wall -Wno-unused-function -g -Isrc -Ibuild
 LDFLAGS =
 
-TARGET = bmc
+TARGET = bmcc
 
-BISON_SRC = parser.y
-FLEX_SRC = lexer.l
-C_SRCS = ast.c sema.c codegen.c ir.c main.c
+BISON_SRC = src/bm_script_parser.y
+FLEX_SRC = src/bm_script_lexer.l
+C_SRCS = src/ast.c src/runner.c src/util.c src/driver.c
 
-BISON_C = parser.tab.c
-BISON_H = parser.tab.h
-FLEX_C = lex.yy.c
+BISON_C = build/parser.c
+BISON_H = build/parser.h
+FLEX_C = build/lexer.c
 
 all: $(TARGET)
 
-$(BISON_C) $(BISON_H): $(BISON_SRC)
-	bison -d -o $(BISON_C) $(BISON_SRC)
+build:
+	mkdir -p build
 
-$(FLEX_C): $(FLEX_SRC) $(BISON_H)
+$(BISON_C) $(BISON_H): $(BISON_SRC) | build
+	bison -d -o $(BISON_C) --defines=$(BISON_H) $(BISON_SRC)
+
+$(FLEX_C): $(FLEX_SRC) $(BISON_H) | build
 	flex -o $(FLEX_C) $(FLEX_SRC)
 
 $(TARGET): $(FLEX_C) $(BISON_C) $(C_SRCS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(FLEX_C) $(BISON_C) $(C_SRCS) $(LDFLAGS)
 
 clean:
-	rm -f $(TARGET) $(BISON_C) $(BISON_H) $(FLEX_C)
+	rm -f $(TARGET)
+	rm -rf build
 
 .PHONY: all clean

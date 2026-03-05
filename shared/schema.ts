@@ -34,6 +34,43 @@ export interface Example {
   description: string;
 }
 
+export interface ExecutionResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  error?: string;
+}
+
+export const runRequestSchema = z.object({
+  code: z.string().min(1),
+  target: z.enum(targetLanguages),
+});
+
+export type RunRequest = z.infer<typeof runRequestSchema>;
+
+export interface GithubRepo {
+  name: string;
+  full_name: string;
+  html_url: string;
+  description: string | null;
+  private: boolean;
+}
+
+export const createRepoSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  isPrivate: z.boolean().optional().default(false),
+  githubToken: z.string().min(1),
+});
+
+export const saveFileSchema = z.object({
+  repo: z.string().min(1),
+  path: z.string().min(1),
+  content: z.string(),
+  message: z.string().optional().default("Update from BM Compiler"),
+  githubToken: z.string().min(1),
+});
+
 export const targetLabels: Record<TargetLanguage, string> = {
   c: 'C',
   cpp: 'C++',

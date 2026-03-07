@@ -8,7 +8,10 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { runRequestSchema, createRepoSchema, commitFileSchema } from "@shared/schema.js";
 
-const BMCC_PATH = path.resolve("compiler/bmcc");
+const BMCC_PATH =
+  process.platform === "win32"
+    ? path.resolve("compiler/bmcc.exe")
+    : path.resolve("compiler/bmcc");
 
 function getGithubToken(req: any): string | null {
   return req.headers["x-github-token"] as string || null;

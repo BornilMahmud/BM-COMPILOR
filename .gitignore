@@ -3,6 +3,11 @@ dist
 build
 .local
 .replit
+.agents
+.cache
+.config
+replit.md
 client/.env
 compiler/build
+attached_assets
 *.log

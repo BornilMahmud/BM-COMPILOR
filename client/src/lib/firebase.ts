@@ -9,28 +9,35 @@ import {
   type User,
 } from "firebase/auth";
 
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
-const appId = import.meta.env.VITE_FIREBASE_APP_ID;
+const firebaseConfig = {
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        "bm-compilor.firebaseapp.com",
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "bm-compilor",
+  storageBucket:     "bm-compilor.firebasestorage.app",
+  messagingSenderId: "98358335395",
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId:     "G-02GCNE2DQG",
+};
 
-const firebaseConfigured = !!(apiKey && projectId && appId);
+const firebaseConfigured = !!(
+  firebaseConfig.apiKey &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
 if (firebaseConfigured) {
   try {
-    app = initializeApp({
-      apiKey,
-      authDomain: `${projectId}.firebaseapp.com`,
-      projectId,
-      storageBucket: `${projectId}.firebasestorage.app`,
-      appId,
-    });
+    app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    console.log("[Firebase] initialized — project:", firebaseConfig.projectId);
   } catch (e) {
-    console.warn("Firebase initialization failed:", e);
+    console.warn("[Firebase] initialization failed:", e);
   }
+} else {
+  console.warn("[Firebase] not configured — running in guest mode");
 }
 
 export { auth };
@@ -39,7 +46,11 @@ const githubProvider = new GithubAuthProvider();
 githubProvider.addScope("repo");
 
 export async function signInWithGithub() {
-  if (!auth) throw new Error("Firebase is not configured. Please set up VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, and VITE_FIREBASE_APP_ID.");
+  if (!auth) {
+    throw new Error(
+      "Firebase is not configured. Add VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_APP_ID to your environment."
+    );
+  }
   const result = await signInWithPopup(auth, githubProvider);
   const credential = GithubAuthProvider.credentialFromResult(result);
   const githubToken = credential?.accessToken ?? null;

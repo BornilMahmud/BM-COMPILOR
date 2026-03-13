@@ -3,7 +3,7 @@ import { z } from "zod";
 export const targetLanguages = [
   'c', 'cpp', 'java', 'py',
   'js', 'ts', 'php', 'rb', 'go', 'rs', 'dart',
-  'html', 'css', 'sql', 'mysql', 'ora', 'sh',
+  'sql', 'mysql', 'ora', 'sh',
 ] as const;
 
 export type TargetLanguage = typeof targetLanguages[number];
@@ -58,8 +58,6 @@ export const targetLabels: Record<TargetLanguage, string> = {
   go:    'Go',
   rs:    'Rust',
   dart:  'Dart',
-  html:  'HTML',
-  css:   'CSS',
   sql:   'SQL',
   mysql: 'MySQL',
   ora:   'OracleSQL',
@@ -78,8 +76,6 @@ export const targetFileExtensions: Record<TargetLanguage, string> = {
   go:    '.go',
   rs:    '.rs',
   dart:  '.dart',
-  html:  '.html',
-  css:   '.css',
   sql:   '.sql',
   mysql: '.sql',
   ora:   '.sql',
@@ -98,8 +94,6 @@ export const defaultFilenames: Record<TargetLanguage, string> = {
   go:    'main.go',
   rs:    'main.rs',
   dart:  'main.dart',
-  html:  'index.html',
-  css:   'style.css',
   sql:   'query.sql',
   mysql: 'query.sql',
   ora:   'query.sql',
@@ -107,10 +101,10 @@ export const defaultFilenames: Record<TargetLanguage, string> = {
 };
 
 export const languageGroups: { label: string; langs: TargetLanguage[] }[] = [
-  { label: 'Systems',    langs: ['c', 'cpp', 'rs'] },
-  { label: 'JVM',        langs: ['java'] },
-  { label: 'Scripting',  langs: ['py', 'rb', 'php', 'sh'] },
-  { label: 'Web',        langs: ['js', 'ts', 'html', 'css'] },
+  { label: 'Systems',      langs: ['c', 'cpp', 'rs'] },
+  { label: 'JVM',          langs: ['java'] },
+  { label: 'Scripting',    langs: ['py', 'rb', 'php', 'sh'] },
+  { label: 'Web',          langs: ['js', 'ts'] },
   { label: 'Mobile/Other', langs: ['dart', 'go'] },
-  { label: 'Database',   langs: ['sql', 'mysql', 'ora'] },
+  { label: 'Database',     langs: ['sql', 'mysql', 'ora'] },
 ];

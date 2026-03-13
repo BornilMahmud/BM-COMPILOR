@@ -27,8 +27,6 @@ const defaultCode: Record<TargetLanguage, string> = {
   go: `package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello, World!")\n\n    nums := []int{1, 2, 3, 4, 5}\n    sum := 0\n    for _, n := range nums {\n        sum += n\n    }\n    fmt.Println("Sum:", sum)\n}\n`,
   rs: `fn main() {\n    println!("Hello, World!");\n\n    let nums = vec![1, 2, 3, 4, 5];\n    let sum: i32 = nums.iter().sum();\n    println!("Sum: {}", sum);\n}\n`,
   dart: `void main() {\n  print("Hello, World!");\n\n  List<int> nums = [1, 2, 3, 4, 5];\n  int sum = nums.reduce((a, b) => a + b);\n  print("Sum: \$sum");\n}\n`,
-  html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>My Page</title>\n</head>\n<body>\n  <h1>Hello, World!</h1>\n  <p>Welcome to BM Compiler — HTML Runner.</p>\n  <ul>\n    <li>Item One</li>\n    <li>Item Two</li>\n    <li>Item Three</li>\n  </ul>\n</body>\n</html>\n`,
-  css: `/* BM Compiler — CSS Runner */\nbody {\n  margin: 0;\n  font-family: sans-serif;\n  background: #1e1e1e;\n  color: #fff;\n}\n\nh1 {\n  color: #4ec9b0;\n  font-size: 2rem;\n}\n\n.container {\n  max-width: 800px;\n  margin: 0 auto;\n  padding: 1rem;\n}\n\n.button {\n  background: #0078d4;\n  color: #fff;\n  border: none;\n  padding: 0.5rem 1rem;\n  border-radius: 4px;\n  cursor: pointer;\n}\n`,
   sql: `-- BM Compiler — SQL Runner (SQLite engine)\nCREATE TABLE users (\n  id   INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  age  INTEGER\n);\n\nINSERT INTO users (name, age) VALUES ('Alice', 30);\nINSERT INTO users (name, age) VALUES ('Bob', 25);\nINSERT INTO users (name, age) VALUES ('Carol', 35);\n\nSELECT * FROM users;\nSELECT name FROM users WHERE age > 28 ORDER BY age;\n`,
   mysql: `-- BM Compiler — MySQL-compatible SQL (SQLite engine)\nCREATE TABLE products (\n  id    INTEGER PRIMARY KEY AUTOINCREMENT,\n  name  TEXT NOT NULL,\n  price REAL\n);\n\nINSERT INTO products (name, price) VALUES ('Apple', 1.20);\nINSERT INTO products (name, price) VALUES ('Banana', 0.50);\nINSERT INTO products (name, price) VALUES ('Cherry', 3.00);\n\nSELECT * FROM products;\nSELECT name, price FROM products WHERE price > 1.00 ORDER BY price DESC;\n`,
   ora: `-- BM Compiler — OracleSQL-compatible (SQLite engine)\nCREATE TABLE employees (\n  emp_id   INTEGER PRIMARY KEY,\n  emp_name TEXT NOT NULL,\n  salary   REAL,\n  dept     TEXT\n);\n\nINSERT INTO employees VALUES (1, 'Alice',  75000, 'Engineering');\nINSERT INTO employees VALUES (2, 'Bob',    60000, 'Marketing');\nINSERT INTO employees VALUES (3, 'Carol',  85000, 'Engineering');\n\nSELECT emp_name, salary FROM employees WHERE dept = 'Engineering' ORDER BY salary DESC;\nSELECT dept, AVG(salary) AS avg_salary FROM employees GROUP BY dept;\n`,
@@ -46,8 +44,6 @@ function getEditorLang(target: TargetLanguage) {
       return python();
     case "js":
     case "ts":
-    case "html":
-    case "css":
     case "sql":
     case "mysql":
     case "ora":

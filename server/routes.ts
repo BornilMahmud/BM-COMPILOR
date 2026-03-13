@@ -159,45 +159,6 @@ async function runDirect(
     return { ...(await spawnDirect("dart", ["run", filePath], stdinText)), phase: "run" };
   }
 
-  /* HTML */
-  if (lang === "html") {
-    const script = `
-const fs=require('fs'),file=process.argv[2],html=fs.readFileSync(file,'utf8');
-const lines=html.split('\\n').length,tags=(html.match(/<[a-zA-Z][^>]*>/g)||[]).length;
-const text=html.replace(/<style[\\s\\S]*?<\\/style>/gi,'').replace(/<script[\\s\\S]*?<\\/script>/gi,'')
-  .replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
-  .replace(/\\s+/g,' ').trim();
-console.log('=== BM Compiler: HTML Runner ===');
-console.log('File   : '+file);console.log('Lines  : '+lines);console.log('Tags   : '+tags);console.log('---');
-if(text) console.log('Text content:\\n'+text); else console.log('(no visible text content)');
-console.log('\\n[Open in a web browser to see the rendered page]');
-`;
-    const scriptPath = join(dir, "_html_runner.js");
-    await writeFile(scriptPath, script);
-    const result = await spawnDirect("node", [scriptPath, filePath], undefined);
-    try { await rm(scriptPath, { force: true }); } catch {}
-    return { ...result, phase: "run" };
-  }
-
-  /* CSS */
-  if (lang === "css") {
-    const script = `
-const fs=require('fs'),file=process.argv[2],css=fs.readFileSync(file,'utf8');
-const rules=(css.match(/[^{}]+\\{[^}]*\\}/g)||[]).length,props=(css.match(/[a-z-]+\\s*:/g)||[]).length;
-const sels=(css.match(/[^{}]+(?=\\{)/g)||[]).map(s=>s.trim()).filter(Boolean);
-console.log('=== BM Compiler: CSS Runner ===');
-console.log('File      : '+file);console.log('Rules     : '+rules);console.log('Properties: '+props);
-console.log('Selectors : '+sels.slice(0,10).join(', ')+(sels.length>10?'...':''));
-console.log('---');console.log('CSS Source:');console.log(css);
-console.log('[Link this CSS file in an HTML file to apply styles]');
-`;
-    const scriptPath = join(dir, "_css_runner.js");
-    await writeFile(scriptPath, script);
-    const result = await spawnDirect("node", [scriptPath, filePath], undefined);
-    try { await rm(scriptPath, { force: true }); } catch {}
-    return { ...result, phase: "run" };
-  }
-
   /* SQL / MySQL / OracleSQL */
   if (lang === "sql" || lang === "mysql" || lang === "ora") {
     const { readFileSync } = await import("fs");
@@ -214,7 +175,7 @@ console.log('[Link this CSS file in an HTML file to apply styles]');
 
   return {
     ok: false, exit_code: 1, stdout: "", phase: "setup",
-    stderr: `Unsupported language: '${lang}'. Supported: c, cpp, java, py, js, ts, php, rb, go, rs, dart, html, css, sql, mysql, ora, sh`,
+    stderr: `Unsupported language: '${lang}'. Supported: c, cpp, java, py, js, ts, php, rb, go, rs, dart, sql, mysql, ora, sh`,
   };
 }
 

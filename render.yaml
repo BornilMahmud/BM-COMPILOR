@@ -4,6 +4,9 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
+    buildFilter:
+      paths:
+        - "**/*"
     envVars:
       - key: NODE_ENV
         value: production
@@ -15,4 +18,11 @@ services:
         sync: false
       - key: VITE_FIREBASE_APP_ID
         sync: false
+    dockerBuildArgs:
+      - name: VITE_FIREBASE_API_KEY
+        fromEnvVar: VITE_FIREBASE_API_KEY
+      - name: VITE_FIREBASE_PROJECT_ID
+        fromEnvVar: VITE_FIREBASE_PROJECT_ID
+      - name: VITE_FIREBASE_APP_ID
+        fromEnvVar: VITE_FIREBASE_APP_ID
     healthCheckPath: /api/health

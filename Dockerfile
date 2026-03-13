@@ -39,6 +39,16 @@ COPY . .
 # Build compiler from Flex + Bison sources
 RUN cd compiler && make clean && make
 
+# Declare Firebase build-time args (must be passed via --build-arg or Render buildArgs)
+ARG VITE_FIREBASE_API_KEY
+ARG VITE_FIREBASE_PROJECT_ID
+ARG VITE_FIREBASE_APP_ID
+
+# Expose them as env vars so Vite can read them during build
+ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
+ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+
 # Build frontend + bundle server
 RUN npm run build
 

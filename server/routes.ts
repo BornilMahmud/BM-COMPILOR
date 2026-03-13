@@ -1,12 +1,12 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { execFile, spawn } from "child_process";
-import { writeFile, mkdir, rm, access } from "fs/promises";
+import { writeFile, mkdir, rm } from "fs/promises";
 import { join, dirname, basename } from "path";
-import { tmpdir, platform } from "os";
+import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import path from "path";
-import { createWriteStream, existsSync } from "fs";
+import { existsSync } from "fs";
 import { runRequestSchema, createRepoSchema, commitFileSchema } from "@shared/schema.js";
 
 const IS_WIN = process.platform === "win32";

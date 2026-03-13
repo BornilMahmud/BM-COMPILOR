@@ -323,5 +323,90 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/github/commit-tree", async (req, res) => {
+    try {
+      const token = getGithubToken(req);
+      if (!token) return res.status(401).json({ error: "No GitHub token" });
+
+      const { repo, files, message, basePath } = req.body as {
+        repo: string;
+        files: { path: string; content: string }[];
+        message?: string;
+        basePath?: string;
+      };
+
+      if (!repo || !Array.isArray(files) || files.length === 0) {
+        return res.status(400).json({ error: "repo and files[] required" });
+      }
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+      };
+
+      const repoRes = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+      if (!repoRes.ok) return res.status(404).json({ error: "Repo not found" });
+      const repoData = await repoRes.json();
+      const branch = repoData.default_branch ?? "main";
+
+      const refRes = await fetch(`https://api.github.com/repos/${repo}/git/refs/heads/${branch}`, { headers });
+      if (!refRes.ok) return res.status(404).json({ error: "Branch not found" });
+      const refData = await refRes.json();
+      const latestCommitSha: string = refData.object.sha;
+
+      const commitRes = await fetch(`https://api.github.com/repos/${repo}/git/commits/${latestCommitSha}`, { headers });
+      const commitData = await commitRes.json();
+      const baseTreeSha: string = commitData.tree.sha;
+
+      const treeItems = files.map((f) => ({
+        path: basePath ? `${basePath.replace(/\/+$/, "")}/${f.path}` : f.path,
+        mode: "100644",
+        type: "blob",
+        content: f.content,
+      }));
+
+      const newTreeRes = await fetch(`https://api.github.com/repos/${repo}/git/trees`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ base_tree: baseTreeSha, tree: treeItems }),
+      });
+      if (!newTreeRes.ok) {
+        const err = await newTreeRes.json();
+        return res.status(newTreeRes.status).json({ error: err.message || "Failed to create tree" });
+      }
+      const newTree = await newTreeRes.json();
+
+      const newCommitRes = await fetch(`https://api.github.com/repos/${repo}/git/commits`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: message || `Push ${files.length} file(s) via BM Compiler`,
+          tree: newTree.sha,
+          parents: [latestCommitSha],
+        }),
+      });
+      if (!newCommitRes.ok) {
+        const err = await newCommitRes.json();
+        return res.status(newCommitRes.status).json({ error: err.message || "Failed to create commit" });
+      }
+      const newCommit = await newCommitRes.json();
+
+      const updateRefRes = await fetch(`https://api.github.com/repos/${repo}/git/refs/heads/${branch}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ sha: newCommit.sha }),
+      });
+      if (!updateRefRes.ok) {
+        const err = await updateRefRes.json();
+        return res.status(updateRefRes.status).json({ error: err.message || "Failed to update ref" });
+      }
+
+      return res.json({ success: true, commit: newCommit.sha, count: files.length });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

@@ -4,7 +4,10 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp, Terminal, User, X, Upload } from "lucide-react";
+import {
+  Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
+  Terminal, User, X, Upload, Menu, Github,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { javascript } from "@codemirror/lang-javascript";
@@ -16,6 +19,7 @@ import { targetLabels, languageGroups } from "@shared/schema";
 import { useFileTree, findNodeById, collectFiles } from "@/hooks/use-file-tree";
 import type { FileNode } from "@/hooks/use-file-tree";
 import FileExplorer from "@/components/file-explorer";
+import GitHubImportModal from "@/components/github-import-modal";
 
 function getEditorLang(target: TargetLanguage) {
   switch (target) {
@@ -37,7 +41,7 @@ export default function IDE() {
   const tabsRef = useRef<HTMLDivElement>(null);
   const stdinRef = useRef<HTMLTextAreaElement>(null);
 
-  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder } = useFileTree();
+  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles } = useFileTree();
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
     const saved = localStorage.getItem("bm_open_tabs");
@@ -56,6 +60,8 @@ export default function IDE() {
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [stdinInput, setStdinInput] = useState("");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   const isGuest = !user;
 
@@ -100,10 +106,19 @@ export default function IDE() {
     }
   }, [terminalLines]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) setSidebarOpen(true);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const openFile = useCallback((node: FileNode) => {
     if (node.type !== "file") return;
     setOpenTabs((prev) => prev.includes(node.id) ? prev : [...prev, node.id]);
     setActiveTabId(node.id);
+    if (window.innerWidth < 768) setSidebarOpen(false);
   }, []);
 
   const closeTab = useCallback((id: string, e: React.MouseEvent) => {
@@ -131,11 +146,36 @@ export default function IDE() {
   const handleDelete = useCallback((id: string) => {
     deleteNode(id);
     setOpenTabs((prev) => prev.filter((t) => t !== id));
-    setActiveTabId((prev) => {
-      if (prev !== id) return prev;
-      return null;
-    });
+    setActiveTabId((prev) => prev !== id ? prev : null);
   }, [deleteNode]);
+
+  const handleImportFiles = useCallback((files: { path: string; content: string }[]) => {
+    const newTree = importFiles(files);
+    const findFirst = (nodes: FileNode[]): FileNode | null => {
+      for (const n of nodes) {
+        if (n.type === "file") return n;
+        if (n.type === "folder") { const f = findFirst(n.children); if (f) return f; }
+      }
+      return null;
+    };
+    for (const { path } of files) {
+      const name = path.split("/").pop() ?? path;
+      const findByName = (nodes: FileNode[]): FileNode | null => {
+        for (const n of nodes) {
+          if (n.type === "file" && n.name === name) return n;
+          if (n.type === "folder") { const f = findByName(n.children); if (f) return f; }
+        }
+        return null;
+      };
+      const node = findByName(newTree);
+      if (node) {
+        setOpenTabs((prev) => prev.includes(node.id) ? prev : [...prev, node.id]);
+        setActiveTabId(node.id);
+        break;
+      }
+    }
+    toast({ title: "Imported", description: `${files.length} file(s) added to Explorer` });
+  }, [importFiles, toast]);
 
   const handleRun = async () => {
     if (!activeFile) {
@@ -258,26 +298,30 @@ export default function IDE() {
 
   return (
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
-      <header className="flex items-center justify-between px-3 h-11 bg-[#252526] border-b border-[#3c3c3c] flex-shrink-0">
-        <div className="flex items-center gap-2 flex-shrink-0">
+      <header className="flex items-center justify-between px-2 sm:px-3 h-11 bg-[#252526] border-b border-[#3c3c3c] flex-shrink-0 gap-1">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="p-1.5 rounded hover:bg-[#3c3c3c] text-gray-400 hover:text-white md:hidden"
+            title="Toggle explorer"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
           <img src="/bm-logo.png" alt="BM" className="w-6 h-6 object-contain" />
-          <span className="font-semibold text-sm hidden md:inline text-gray-300">BM Compiler</span>
+          <span className="font-semibold text-sm hidden sm:inline text-gray-300">BM Compiler</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
           <Select
             value={language}
-            onValueChange={(v) => {
+            onValueChange={() => {
               if (activeTabId) {
                 const node = findNodeById(tree, activeTabId);
-                if (node) {
-                  const newContent = node.content;
-                  updateContent(activeTabId, newContent);
-                }
+                if (node) updateContent(activeTabId, node.content);
               }
             }}
           >
-            <SelectTrigger className="w-36 h-7 bg-[#3c3c3c] border-[#555] text-white text-xs">
+            <SelectTrigger className="w-28 sm:w-36 h-7 bg-[#3c3c3c] border-[#555] text-white text-xs flex-shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-[#252526] border-[#555] text-white max-h-80">
@@ -298,10 +342,21 @@ export default function IDE() {
             onClick={handleRun}
             disabled={running || !activeFile}
             size="sm"
-            className="bg-green-600 hover:bg-green-700 text-white h-7 px-3 text-xs"
+            className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0"
           >
-            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-            Run
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline ml-1">Run</span>
+          </Button>
+
+          <Button
+            onClick={() => setImportModalOpen(true)}
+            size="sm"
+            variant="outline"
+            className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 sm:px-3 text-xs flex-shrink-0"
+            title="Import project from GitHub"
+          >
+            <Github className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline ml-1">Import</span>
           </Button>
 
           {!isGuest && (
@@ -309,11 +364,11 @@ export default function IDE() {
               onClick={handleSaveFile}
               disabled={saving || !activeFile || !repo}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-3 text-xs"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0"
               title="Save current file to GitHub (Ctrl+S)"
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-              Save
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              <span className="hidden md:inline ml-1">Save</span>
             </Button>
           )}
 
@@ -323,16 +378,16 @@ export default function IDE() {
               disabled={saving || !repo}
               size="sm"
               variant="outline"
-              className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-3 text-xs"
+              className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 sm:px-3 text-xs hidden sm:flex flex-shrink-0"
               title="Push all files to GitHub"
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-              Push All
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              <span className="hidden md:inline ml-1">Push All</span>
             </Button>
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {!isGuest && repo && (
             <button
               onClick={() => navigate("/repo-setup")}
@@ -340,14 +395,14 @@ export default function IDE() {
               title={`Connected to ${repo.full_name}`}
             >
               <FolderGit2 className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{repo.name}</span>
+              <span className="hidden lg:inline">{repo.name}</span>
             </button>
           )}
           {isGuest ? (
             <Button variant="ghost" size="sm" onClick={() => navigate("/")}
               className="text-gray-400 hover:text-white h-7 text-xs gap-1">
               <User className="h-4 w-4" />
-              <span className="hidden md:inline">Sign in</span>
+              <span className="hidden sm:inline">Sign in</span>
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={handleLogout}
@@ -358,20 +413,34 @@ export default function IDE() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <FileExplorer
-          tree={tree}
-          activeFileId={activeTabId}
-          onOpenFile={openFile}
-          onCreate={handleCreate}
-          onDelete={handleDelete}
-          onRename={renameNode}
-          onToggle={toggleFolder}
-          onPushFolder={handlePushFolder}
-          onPushAll={handlePushAll}
-        />
+      <div className="flex-1 flex overflow-hidden relative">
+        {sidebarOpen && window.innerWidth < 768 && (
+          <div
+            className="absolute inset-0 bg-black/50 z-20"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          md:translate-x-0 md:static
+          absolute z-30 h-full
+          transition-transform duration-200
+        `}>
+          <FileExplorer
+            tree={tree}
+            activeFileId={activeTabId}
+            onOpenFile={openFile}
+            onCreate={handleCreate}
+            onDelete={handleDelete}
+            onRename={renameNode}
+            onToggle={toggleFolder}
+            onPushFolder={handlePushFolder}
+            onPushAll={handlePushAll}
+          />
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           <div
             ref={tabsRef}
             className="flex items-end bg-[#252526] border-b border-[#3c3c3c] overflow-x-auto flex-shrink-0 scrollbar-none"
@@ -388,7 +457,7 @@ export default function IDE() {
                   className={`flex items-center gap-1.5 px-3 h-[35px] text-xs border-r border-[#3c3c3c] flex-shrink-0 group
                     ${isActive ? "bg-[#1e1e1e] text-white border-t-2 border-t-blue-500" : "bg-[#2d2d2d] text-gray-400 hover:text-gray-200 hover:bg-[#383838]"}`}
                 >
-                  <span className="max-w-[120px] truncate">{node.name}</span>
+                  <span className="max-w-[100px] sm:max-w-[140px] truncate">{node.name}</span>
                   <span
                     onClick={(e) => closeTab(tabId, e)}
                     className={`ml-1 rounded p-0.5 hover:bg-[#505050] opacity-0 group-hover:opacity-100 ${isActive ? "opacity-100" : ""}`}
@@ -398,9 +467,8 @@ export default function IDE() {
                 </button>
               );
             })}
-
             {openTabs.length === 0 && (
-              <span className="px-4 py-2 text-xs text-gray-600">Open a file from the explorer →</span>
+              <span className="px-4 py-2 text-xs text-gray-600">Open a file from the explorer</span>
             )}
           </div>
 
@@ -417,7 +485,7 @@ export default function IDE() {
               />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-600 text-sm">
-                <div className="text-center">
+                <div className="text-center px-4">
                   <p>No file open</p>
                   <p className="text-xs mt-1 text-gray-700">Create or open a file from the Explorer</p>
                 </div>
@@ -428,22 +496,22 @@ export default function IDE() {
           <div className="flex-shrink-0">
             <button
               onClick={() => setTerminalOpen((p) => !p)}
-              className="w-full flex items-center justify-between px-4 py-1.5 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-400 hover:text-white"
+              className="w-full flex items-center justify-between px-3 sm:px-4 py-1.5 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-400 hover:text-white"
             >
               <div className="flex items-center gap-2">
                 <Terminal className="h-3.5 w-3.5" />
                 <span className="font-medium">Terminal</span>
-                {activeFile && <span className="text-[10px] text-gray-600">— {targetLabels[language]}</span>}
+                {activeFile && <span className="text-[10px] text-gray-600 hidden sm:inline">— {targetLabels[language]}</span>}
               </div>
               {terminalOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
             </button>
           </div>
 
           {terminalOpen && (
-            <div className="h-64 bg-[#0d0d0d] border-t border-[#3c3c3c] flex flex-col flex-shrink-0">
-              <div className="flex-1 overflow-auto p-3 font-mono text-xs">
+            <div className="h-48 sm:h-64 bg-[#0d0d0d] border-t border-[#3c3c3c] flex flex-col flex-shrink-0">
+              <div className="flex-1 overflow-auto p-2 sm:p-3 font-mono text-xs">
                 {terminalLines.map((line, i) => (
-                  <div key={i} className={`leading-5 whitespace-pre-wrap ${
+                  <div key={i} className={`leading-5 whitespace-pre-wrap break-all ${
                     line.type === "stdout" ? "text-[#4ec9b0]" :
                     line.type === "stderr" ? "text-[#f44747]" :
                     line.type === "stdin"  ? "text-[#dcdcaa]" :
@@ -463,10 +531,10 @@ export default function IDE() {
                 <div ref={terminalEndRef} />
               </div>
 
-              <div className="border-t border-[#2d2d30] bg-[#1a1a1a] px-3 py-1.5 flex-shrink-0">
+              <div className="border-t border-[#2d2d30] bg-[#1a1a1a] px-2 sm:px-3 py-1.5 flex-shrink-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[#dcdcaa] text-xs font-mono select-none">
-                    stdin {">"} <span className="text-[#555]">program input (one value per line)</span>
+                    stdin {">"} <span className="text-[#555] hidden sm:inline">program input (one value per line)</span>
                   </span>
                   <Button onClick={handleRun} disabled={running || !activeFile} size="sm" variant="ghost"
                     className="h-6 px-2 text-green-500">
@@ -488,6 +556,14 @@ export default function IDE() {
           )}
         </div>
       </div>
+
+      {importModalOpen && (
+        <GitHubImportModal
+          githubToken={githubToken}
+          onImport={handleImportFiles}
+          onClose={() => setImportModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

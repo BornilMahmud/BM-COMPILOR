@@ -19,7 +19,7 @@ export default function Login() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#1a1a2e]" data-testid="loading-screen">
+      <div className="min-h-screen flex items-center justify-center bg-black" data-testid="loading-screen">
         <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
       </div>
     );
@@ -30,8 +30,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#1a1a2e] p-4">
-      <Card className="w-full max-w-md bg-[#16213e] border-[#0f3460] text-white shadow-2xl">
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+      <div className="absolute inset-0">
+        <img
+          src="/login-bg.gif"
+          alt=""
+          className="w-full h-full object-cover"
+          style={{ objectPosition: "center" }}
+        />
+        <div className="absolute inset-0 bg-black/55" />
+      </div>
+
+      <Card className="relative z-10 w-full max-w-md bg-black/65 backdrop-blur-md border-white/10 text-white shadow-2xl">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="mx-auto" data-testid="logo">
             <img src="/bm-logo.png" alt="BM Compiler Logo" className="w-28 h-28 object-contain drop-shadow-xl" />
@@ -51,7 +61,7 @@ export default function Login() {
           )}
           <Button
             onClick={login}
-            className="w-full bg-[#0f3460] hover:bg-[#1a4080] text-white border border-[#1a4080] h-12 text-base"
+            className="w-full bg-[#0f3460] hover:bg-[#1a4080] text-white border border-[#1a4080]/60 h-12 text-base"
             data-testid="button-login-github"
           >
             <SiGithub className="mr-2 h-5 w-5" />
@@ -59,16 +69,16 @@ export default function Login() {
           </Button>
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-[#0f3460]" />
+              <div className="w-full border-t border-white/10" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-[#16213e] px-3 text-gray-400">or</span>
+              <span className="bg-transparent px-3 text-gray-400">or</span>
             </div>
           </div>
           <Button
             onClick={handleGuest}
             variant="outline"
-            className="w-full border-[#0f3460] text-gray-300 hover:bg-[#0f3460] hover:text-white h-12 text-base bg-transparent"
+            className="w-full border-white/20 text-gray-300 hover:bg-white/10 hover:text-white h-12 text-base bg-transparent"
             data-testid="button-guest"
           >
             <Code2 className="mr-2 h-5 w-5" />

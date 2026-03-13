@@ -14,14 +14,14 @@ export interface FileNode {
 
 const STORAGE_KEY = "bm_file_tree";
 
-function makeFile(name: string): FileNode {
+function makeFile(name: string, content?: string): FileNode {
   const lang = langFromFilename(name);
   return {
     id: crypto.randomUUID(),
     name,
     type: "file",
     language: lang,
-    content: defaultCode[lang] ?? "",
+    content: content ?? defaultCode[lang] ?? "",
     children: [],
     expanded: false,
   };
@@ -73,6 +73,27 @@ function addChildToFolder(tree: FileNode[], parentId: string | null, child: File
     if (n.type === "folder") return { ...n, children: addChildToFolder(n.children, parentId, child) };
     return n;
   });
+}
+
+function insertPath(nodes: FileNode[], parts: string[], content: string): FileNode[] {
+  if (parts.length === 0) return nodes;
+  const [head, ...rest] = parts;
+  if (rest.length === 0) {
+    const idx = nodes.findIndex((n) => n.name === head && n.type === "file");
+    if (idx !== -1) {
+      return nodes.map((n, i) => (i === idx ? { ...n, content } : n));
+    }
+    return [...nodes, makeFile(head, content)];
+  }
+  const idx = nodes.findIndex((n) => n.name === head && n.type === "folder");
+  if (idx !== -1) {
+    return nodes.map((n, i) =>
+      i === idx ? { ...n, children: insertPath(n.children, rest, content), expanded: true } : n
+    );
+  }
+  const folder = makeFolder(head);
+  folder.children = insertPath([], rest, content);
+  return [...nodes, folder];
 }
 
 export function findNodeById(tree: FileNode[], id: string): FileNode | null {
@@ -176,5 +197,20 @@ export function useFileTree() {
     [tree, persist]
   );
 
-  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder };
+  const importFiles = useCallback(
+    (files: { path: string; content: string }[]): FileNode[] => {
+      let next = [...tree];
+      for (const { path, content } of files) {
+        const parts = path.split("/").filter(Boolean);
+        if (parts.length > 0) {
+          next = insertPath(next, parts, content);
+        }
+      }
+      persist(next);
+      return next;
+    },
+    [tree, persist]
+  );
+
+  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles };
 }

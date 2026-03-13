@@ -408,5 +408,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/github/repo-tree", async (req, res) => {
+    try {
+      const { owner, repo, branch: qBranch, subPath } = req.query as Record<string, string>;
+      if (!owner || !repo) return res.status(400).json({ error: "owner and repo required" });
+      const token = getGithubToken(req);
+      const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      let branch = qBranch;
+      if (!branch) {
+        const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+        if (!repoRes.ok) return res.status(repoRes.status).json({ error: "Repo not found or private. Try signing in with GitHub." });
+        const repoData = await repoRes.json();
+        branch = repoData.default_branch || "main";
+      }
+      const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, { headers });
+      if (!treeRes.ok) return res.status(treeRes.status).json({ error: "Failed to load repo file tree" });
+      const treeData = await treeRes.json();
+      let items = ((treeData.tree as any[]) || []).filter((i) => i.type === "blob");
+      const prefix = subPath ? subPath.replace(/^\//, "").replace(/\/$/, "") : "";
+      if (prefix) {
+        items = items
+          .filter((i) => i.path.startsWith(prefix + "/"))
+          .map((i) => ({ ...i, path: i.path.slice(prefix.length + 1) }));
+      }
+      return res.json({ branch, files: items.map((i: any) => ({ path: i.path, size: i.size })) });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/github/import-files", async (req, res) => {
+    try {
+      const { owner, repo, branch, paths, subPath } = req.body as {
+        owner: string; repo: string; branch: string; paths: string[]; subPath?: string;
+      };
+      if (!owner || !repo || !branch || !Array.isArray(paths)) {
+        return res.status(400).json({ error: "owner, repo, branch, and paths[] required" });
+      }
+      const token = getGithubToken(req);
+      const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const toFetch = paths.slice(0, 40);
+      const results = await Promise.all(
+        toFetch.map(async (p) => {
+          const fullPath = subPath ? `${subPath.replace(/\/$/, "")}/${p}` : p;
+          const r = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/contents/${fullPath}?ref=${branch}`,
+            { headers }
+          );
+          if (!r.ok) return null;
+          const data = await r.json();
+          try {
+            const content = Buffer.from((data.content as string).replace(/\n/g, ""), "base64").toString("utf8");
+            return { path: p, content };
+          } catch { return null; }
+        })
+      );
+      return res.json({ files: results.filter(Boolean) });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

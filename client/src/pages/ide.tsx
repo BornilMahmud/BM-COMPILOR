@@ -67,6 +67,7 @@ export default function IDE() {
 
   const [language, setLanguage] = useState<TargetLanguage>("c");
   const [filename, setFilename] = useState(defaultFilenames.c);
+  const [folderPath, setFolderPath] = useState("");
   const [code, setCode] = useState(defaultCode.c);
   const [stdinInput, setStdinInput] = useState("");
   const [running, setRunning] = useState(false);
@@ -153,21 +154,27 @@ export default function IDE() {
     }
   };
 
+  const getCommitPath = () => {
+    const folder = folderPath.trim().replace(/^\/+|\/+$/g, "");
+    return folder ? `${folder}/${filename}` : filename;
+  };
+
   const handleSave = async () => {
     if (!githubToken || !repo) {
       toast({ title: "Cannot save", description: repo ? "No GitHub token" : "No repository selected", variant: "destructive" });
       return;
     }
     setSaving(true);
+    const commitPath = getCommitPath();
     try {
       const res = await fetch("/api/github/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-GitHub-Token": githubToken },
-        body: JSON.stringify({ repo: repo.full_name, path: filename, content: code, message: `Update ${filename} via BM Compiler` }),
+        body: JSON.stringify({ repo: repo.full_name, path: commitPath, content: code, message: `Update ${commitPath} via BM Compiler` }),
       });
       const data = await res.json();
       if (data.success) {
-        toast({ title: "File saved", description: `${filename} committed to ${repo.name}` });
+        toast({ title: "File saved", description: `${commitPath} committed to ${repo.name}` });
       } else {
         throw new Error(data.error || "Failed to save");
       }
@@ -236,12 +243,25 @@ export default function IDE() {
             </SelectContent>
           </Select>
 
-          <Input
-            value={filename}
-            onChange={(e) => setFilename(e.target.value)}
-            className="w-36 h-8 bg-[#3c3c3c] border-[#555] text-white text-sm"
-            data-testid="input-filename"
-          />
+          <div className="flex items-center gap-0.5">
+            <div className="relative flex items-center">
+              <Input
+                value={folderPath}
+                onChange={(e) => setFolderPath(e.target.value)}
+                className="w-28 h-8 bg-[#3c3c3c] border-[#555] border-r-0 rounded-r-none text-white text-sm pr-2"
+                placeholder="folder/"
+                title="Folder path in GitHub repo (e.g. src)"
+                data-testid="input-folder-path"
+              />
+              <span className="h-8 flex items-center text-gray-400 bg-[#3c3c3c] border border-[#555] border-l-0 border-r-0 px-0.5 select-none">/</span>
+            </div>
+            <Input
+              value={filename}
+              onChange={(e) => setFilename(e.target.value)}
+              className="w-32 h-8 bg-[#3c3c3c] border-[#555] border-l-0 rounded-l-none text-white text-sm"
+              data-testid="input-filename"
+            />
+          </div>
 
           <Button
             onClick={handleRun}
@@ -274,9 +294,10 @@ export default function IDE() {
               onClick={() => navigate("/repo-setup")}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
               data-testid="button-change-repo"
+              title={`Saves to: ${repo.full_name}/${getCommitPath()}`}
             >
               <FolderGit2 className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{repo.name}</span>
+              <span className="hidden md:inline">{repo.name}/{getCommitPath()}</span>
             </button>
           )}
           {isGuest ? (

@@ -11,10 +11,10 @@
 
 #define MAX_STR 4096
 #define RUN_BUF_SIZE 65536
-#define TIMEOUT_SEC 5
+#define TIMEOUT_SEC 15
 
 typedef struct {
-    char lang[16];
+    char lang[32];
     char filename[256];
     char stdin_text[MAX_STR];
     int has_lang;
@@ -170,6 +170,15 @@ static void get_dir(const char *path, char *dir, int max) {
     else strcpy(dir, ".");
 }
 
+/* Write a helper script to a temp file, returns 0 on success */
+static int write_script(const char *path, const char *content) {
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fputs(content, f);
+    fclose(f);
+    return 0;
+}
+
 static void run_job(const BMJob *job, const char *source_file, RunResult *result) {
     memset(result, 0, sizeof(RunResult));
     result->ok = 0;
@@ -178,6 +187,7 @@ static void run_job(const BMJob *job, const char *source_file, RunResult *result
     char dir[512];
     get_dir(source_file, dir, sizeof(dir));
 
+    /* ── C ─────────────────────────────────────────────── */
     if (strcmp(job->lang, "c") == 0) {
         char outfile[512];
         snprintf(outfile, sizeof(outfile), "%s/a.out", dir);
@@ -200,6 +210,7 @@ static void run_job(const BMJob *job, const char *source_file, RunResult *result
         result->ok = (rc == 0) ? 1 : 0;
         unlink(outfile);
 
+    /* ── C++ ────────────────────────────────────────────── */
     } else if (strcmp(job->lang, "cpp") == 0) {
         char outfile[512];
         snprintf(outfile, sizeof(outfile), "%s/a.out", dir);
@@ -222,6 +233,7 @@ static void run_job(const BMJob *job, const char *source_file, RunResult *result
         result->ok = (rc == 0) ? 1 : 0;
         unlink(outfile);
 
+    /* ── Java ───────────────────────────────────────────── */
     } else if (strcmp(job->lang, "java") == 0) {
         strcpy(result->phase, "compile");
         char *compile_args[] = { "javac", (char*)source_file, NULL };
@@ -252,8 +264,8 @@ static void run_job(const BMJob *job, const char *source_file, RunResult *result
         char classfile[512];
         snprintf(classfile, sizeof(classfile), "%s/%s.class", dir, classname);
         unlink(classfile);
-        unlink(source_file);
 
+    /* ── Python ─────────────────────────────────────────── */
     } else if (strcmp(job->lang, "py") == 0) {
         strcpy(result->phase, "run");
         char *run_args[] = { "python3", (char*)source_file, NULL };
@@ -263,9 +275,191 @@ static void run_job(const BMJob *job, const char *source_file, RunResult *result
         result->exit_code = rc;
         result->ok = (rc == 0) ? 1 : 0;
 
+    /* ── JavaScript ─────────────────────────────────────── */
+    } else if (strcmp(job->lang, "js") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "node", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── TypeScript ─────────────────────────────────────── */
+    } else if (strcmp(job->lang, "ts") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "npx", "tsx", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── PHP ────────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "php") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "php", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── Ruby ───────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "rb") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "ruby", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── Go ─────────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "go") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "go", "run", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── Rust ───────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "rs") == 0) {
+        char outfile[512];
+        snprintf(outfile, sizeof(outfile), "%s/rust_out", dir);
+
+        strcpy(result->phase, "compile");
+        char *compile_args[] = { "rustc", (char*)source_file, "-o", outfile, NULL };
+        int rc = exec_cmd(compile_args, NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        if (rc != 0) { result->exit_code = rc; return; }
+
+        strcpy(result->phase, "run");
+        result->stdout_buf[0] = '\0';
+        result->stderr_buf[0] = '\0';
+        char *run_args[] = { outfile, NULL };
+        rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                     result->stdout_buf, RUN_BUF_SIZE,
+                     result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+        unlink(outfile);
+
+    /* ── Dart ───────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "dart") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "dart", "run", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── HTML ───────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "html") == 0) {
+        strcpy(result->phase, "run");
+        char script_path[512];
+        snprintf(script_path, sizeof(script_path), "%s/_html_runner.js", dir);
+        const char *html_script =
+            "const fs=require('fs');\n"
+            "const file=process.argv[2];\n"
+            "const html=fs.readFileSync(file,'utf8');\n"
+            "const lines=html.split('\\n').length;\n"
+            "const tags=(html.match(/<[a-zA-Z][^>]*>/g)||[]).length;\n"
+            "const text=html\n"
+            "  .replace(/<style[\\s\\S]*?<\\/style>/gi,'')\n"
+            "  .replace(/<script[\\s\\S]*?<\\/script>/gi,'')\n"
+            "  .replace(/<[^>]+>/g,'')\n"
+            "  .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')\n"
+            "  .replace(/&nbsp;/g,' ').replace(/\\s+/g,' ').trim();\n"
+            "console.log('=== BM Compiler: HTML Runner ===');\n"
+            "console.log('File   : '+file);\n"
+            "console.log('Lines  : '+lines);\n"
+            "console.log('Tags   : '+tags);\n"
+            "console.log('---');\n"
+            "if(text) console.log('Text content:\\n'+text);\n"
+            "else console.log('(no visible text content)');\n"
+            "console.log('\\n[Open in a web browser to see the rendered page]');\n";
+        if (write_script(script_path, html_script) != 0) {
+            strcpy(result->stderr_buf, "Failed to create HTML runner");
+            return;
+        }
+        char *run_args[] = { "node", script_path, (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+        unlink(script_path);
+
+    /* ── CSS ────────────────────────────────────────────── */
+    } else if (strcmp(job->lang, "css") == 0) {
+        strcpy(result->phase, "run");
+        char script_path[512];
+        snprintf(script_path, sizeof(script_path), "%s/_css_runner.js", dir);
+        const char *css_script =
+            "const fs=require('fs');\n"
+            "const file=process.argv[2];\n"
+            "const css=fs.readFileSync(file,'utf8');\n"
+            "const rules=(css.match(/[^{}]+\\{[^}]*\\}/g)||[]).length;\n"
+            "const props=(css.match(/[a-z-]+\\s*:/g)||[]).length;\n"
+            "const selectors=(css.match(/[^{}]+(?=\\{)/g)||[]).map(s=>s.trim()).filter(Boolean);\n"
+            "console.log('=== BM Compiler: CSS Runner ===');\n"
+            "console.log('File      : '+file);\n"
+            "console.log('Rules     : '+rules);\n"
+            "console.log('Properties: '+props);\n"
+            "console.log('Selectors : '+selectors.slice(0,10).join(', ')+(selectors.length>10?'...':''));\n"
+            "console.log('---');\n"
+            "console.log('CSS Source:');\n"
+            "console.log(css);\n"
+            "console.log('[Link this CSS file in an HTML file to apply styles]');\n";
+        if (write_script(script_path, css_script) != 0) {
+            strcpy(result->stderr_buf, "Failed to create CSS runner");
+            return;
+        }
+        char *run_args[] = { "node", script_path, (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+        unlink(script_path);
+
+    /* ── SQL (SQLite — MySQL/OracleSQL compatible subset) ── */
+    } else if (strcmp(job->lang, "sql") == 0 || strcmp(job->lang, "mysql") == 0 || strcmp(job->lang, "ora") == 0) {
+        strcpy(result->phase, "run");
+        /* Read SQL file and pipe to sqlite3 :memory: */
+        char *run_args[] = { "sqlite3", ":memory:", NULL };
+        FILE *f = fopen(source_file, "r");
+        char sql_buf[MAX_STR] = {0};
+        if (f) {
+            fread(sql_buf, 1, sizeof(sql_buf) - 1, f);
+            fclose(f);
+        }
+        int rc = exec_cmd(run_args, sql_buf,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
+    /* ── Bash / Shell ───────────────────────────────────── */
+    } else if (strcmp(job->lang, "sh") == 0 || strcmp(job->lang, "bash") == 0) {
+        strcpy(result->phase, "run");
+        char *run_args[] = { "bash", (char*)source_file, NULL };
+        int rc = exec_cmd(run_args, job->has_stdin ? job->stdin_text : NULL,
+                         result->stdout_buf, RUN_BUF_SIZE,
+                         result->stderr_buf, RUN_BUF_SIZE);
+        result->exit_code = rc;
+        result->ok = (rc == 0) ? 1 : 0;
+
     } else {
         strcpy(result->phase, "setup");
-        snprintf(result->stderr_buf, RUN_BUF_SIZE, "Unsupported language: %s", job->lang);
+        snprintf(result->stderr_buf, RUN_BUF_SIZE,
+                 "Unsupported language: '%s'\nSupported: c, cpp, java, py, js, ts, php, rb, go, rs, dart, html, css, sql, mysql, ora, sh",
+                 job->lang);
     }
 }
 
@@ -347,7 +541,8 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--json") == 0) {
             do_json = 1;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            fprintf(stderr, "Usage: bmcc --lang <c|cpp|java|py> --file <path> [--run] [--stdin-text <text>] [--json]\n");
+            fprintf(stderr, "Usage: bmcc --lang <lang> --file <path> [--run] [--stdin-text <text>] [--json]\n");
+            fprintf(stderr, "Languages: c, cpp, java, py, js, ts, php, rb, go, rs, dart, html, css, sql, mysql, ora, sh\n");
             return 0;
         }
     }
@@ -356,7 +551,7 @@ int main(int argc, char **argv) {
         if (do_json) {
             output_json(0, 1, "", "Missing --lang or --file argument", "setup");
         } else {
-            fprintf(stderr, "Usage: bmcc --lang <c|cpp|java|py> --file <path> [--run] [--stdin-text <text>] [--json]\n");
+            fprintf(stderr, "Usage: bmcc --lang <lang> --file <path> [--run] [--stdin-text <text>] [--json]\n");
         }
         return 1;
     }

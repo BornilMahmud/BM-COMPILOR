@@ -33,8 +33,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-[#1a1a2e] p-4">
       <Card className="w-full max-w-md bg-[#16213e] border-[#0f3460] text-white shadow-2xl">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="mx-auto w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg" data-testid="logo">
-            <span className="text-3xl font-bold text-white">BM</span>
+          <div className="mx-auto" data-testid="logo">
+            <img src="/bm-logo.png" alt="BM Compiler Logo" className="w-28 h-28 object-contain drop-shadow-xl" />
           </div>
           <CardTitle className="text-2xl font-bold text-white" data-testid="title">BM Compiler</CardTitle>
           <CardDescription className="text-gray-300 text-base">

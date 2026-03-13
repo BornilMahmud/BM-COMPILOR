@@ -216,8 +216,8 @@ export default function IDE() {
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-white" data-testid="ide-page">
       <header className="flex items-center justify-between px-4 h-12 bg-[#252526] border-b border-[#3c3c3c] flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-xs font-bold text-white">BM</span>
+          <div className="w-7 h-7 flex items-center justify-center">
+            <img src="/bm-logo.png" alt="BM Compiler Logo" className="w-7 h-7 object-contain" />
           </div>
           <span className="font-semibold text-sm hidden md:inline" data-testid="text-header-title">BM Compiler</span>
         </div>

@@ -2,7 +2,7 @@
 
 A web-based online code compiler and runner with GitHub integration. Write, run, and save code directly from your browser — no installation required.
 
-**Live demo:** https://bmcompilor.onrender.com
+**Live demo:** https://bmcompilor.tech
 
 ---
 

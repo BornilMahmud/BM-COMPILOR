@@ -5,7 +5,7 @@ WORKDIR /app
 # Install all language runtimes and build tools
 RUN apt-get update && apt-get install -y \
     # Core build tools
-    gcc g++ make flex bison \
+    gcc g++ make flex bison python3-dev \
     # JVM
     default-jdk \
     # Scripting languages

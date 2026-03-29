@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
-  Terminal, User, X, Upload, Menu, Github, CloudDownload,
+  Terminal, User, X, Upload, Menu, Github, CloudDownload, SquareTerminal,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -20,6 +20,8 @@ import { useFileTree, findNodeById, collectFiles, getNodePath } from "@/hooks/us
 import type { FileNode } from "@/hooks/use-file-tree";
 import FileExplorer from "@/components/file-explorer";
 import GitHubImportModal from "@/components/github-import-modal";
+import XTermTerminal from "@/components/xterm-terminal";
+import type { XTermHandle } from "@/components/xterm-terminal";
 
 function getEditorLang(target: TargetLanguage) {
   switch (target) {
@@ -31,15 +33,13 @@ function getEditorLang(target: TargetLanguage) {
   }
 }
 
-type TerminalLine = { type: "system" | "stdout" | "stderr" | "stdin" | "info"; text: string };
-
 export default function IDE() {
   const { user, loading, githubToken, logout } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const terminalEndRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
-  const stdinRef = useRef<HTMLTextAreaElement>(null);
+  const xtermOutputRef = useRef<XTermHandle>(null);
+  const xtermShellRef = useRef<XTermHandle>(null);
 
   const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles } = useFileTree();
 
@@ -53,11 +53,8 @@ export default function IDE() {
 
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
-    { type: "system", text: "BM Compiler Terminal — Ready" },
-    { type: "info", text: "Open a file, write code, and press Run (or Ctrl+Enter)." },
-  ]);
   const [terminalOpen, setTerminalOpen] = useState(true);
+  const [terminalTab, setTerminalTab] = useState<"output" | "shell">("output");
   const [stdinInput, setStdinInput] = useState("");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
@@ -100,12 +97,6 @@ export default function IDE() {
     if (activeTabId) localStorage.setItem("bm_active_tab", activeTabId);
     else localStorage.removeItem("bm_active_tab");
   }, [activeTabId]);
-
-  useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [terminalLines]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -185,12 +176,13 @@ export default function IDE() {
     }
     setRunning(true);
     setTerminalOpen(true);
-    const newLines: TerminalLine[] = [
-      { type: "system", text: `$ bmcc --lang ${language} --file "${activeFile.name}" --run` },
-    ];
-    if (stdinInput.trim()) newLines.push({ type: "stdin", text: `[stdin] ${stdinInput}` });
-    newLines.push({ type: "info", text: "Running..." });
-    setTerminalLines(newLines);
+    setTerminalTab("output");
+
+    const out = xtermOutputRef.current;
+    out?.writeCommand(`bmcc --lang ${language} --file "${activeFile.name}" --run`);
+    if (stdinInput.trim()) out?.writeOutput(`[stdin] ${stdinInput}`);
+    out?.writeOutput("\x1b[90mRunning...\x1b[0m");
+
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -201,13 +193,12 @@ export default function IDE() {
         body: JSON.stringify({ language, filename: activeFile.name, code: activeFile.content, stdin: stdinInput || undefined }),
       });
       const result: RunResult = await res.json();
-      const outputLines: TerminalLine[] = [...newLines.slice(0, -1)];
-      if (result.stdout) result.stdout.split("\n").forEach((line) => { if (line) outputLines.push({ type: "stdout", text: line }); });
-      if (result.stderr) result.stderr.split("\n").forEach((line) => { if (line) outputLines.push({ type: "stderr", text: line }); });
-      outputLines.push({ type: result.ok ? "system" : "stderr", text: `\nProcess exited with code ${result.exit_code} (${result.phase})` });
-      setTerminalLines(outputLines);
+      if (result.stdout) out?.writeOutput(result.stdout);
+      if (result.stderr) out?.writeOutput(result.stderr, true);
+      const exitColor = result.ok ? "\x1b[32m" : "\x1b[31m";
+      out?.writeOutput(`${exitColor}[exited: code ${result.exit_code} · ${result.phase}]\x1b[0m`);
     } catch (err: any) {
-      setTerminalLines([...newLines.slice(0, -1), { type: "stderr", text: err.message || "Request failed" }]);
+      out?.writeOutput(err.message || "Request failed", true);
     } finally {
       setRunning(false);
     }
@@ -575,64 +566,76 @@ export default function IDE() {
             )}
           </div>
 
-          <div className="flex-shrink-0">
-            <button
-              onClick={() => setTerminalOpen((p) => !p)}
-              className="w-full flex items-center justify-between px-3 sm:px-4 py-1.5 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-400 hover:text-white"
-            >
-              <div className="flex items-center gap-2">
+          <div className="flex-shrink-0 border-t border-[#3c3c3c]">
+            <div className="flex items-center bg-[#252526]">
+              <button
+                onClick={() => setTerminalOpen((p) => !p)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-400 hover:text-white"
+              >
                 <Terminal className="h-3.5 w-3.5" />
-                <span className="font-medium">Terminal</span>
-                {activeFile && <span className="text-[10px] text-gray-600 hidden sm:inline">— {targetLabels[language]}</span>}
-              </div>
-              {terminalOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-            </button>
+                {terminalOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+              </button>
+
+              {terminalOpen && (
+                <>
+                  <button
+                    onClick={() => setTerminalTab("output")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                      terminalTab === "output"
+                        ? "border-blue-500 text-white"
+                        : "border-transparent text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <Play className="h-3 w-3" />
+                    Output
+                  </button>
+                  <button
+                    onClick={() => { setTerminalTab("shell"); setTimeout(() => xtermShellRef.current?.focus(), 50); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                      terminalTab === "shell"
+                        ? "border-blue-500 text-white"
+                        : "border-transparent text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <SquareTerminal className="h-3 w-3" />
+                    Shell
+                  </button>
+                </>
+              )}
+
+              <div className="flex-1" />
+
+              {terminalOpen && terminalTab === "output" && (
+                <div className="flex items-center gap-1 pr-1">
+                  <span className="text-[10px] text-gray-600 hidden sm:inline font-mono">stdin:</span>
+                  <input
+                    value={stdinInput}
+                    onChange={(e) => setStdinInput(e.target.value)}
+                    onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); } }}
+                    placeholder="program input…"
+                    className="h-6 w-28 sm:w-40 bg-[#1a1a1a] border border-[#3c3c3c] rounded text-white text-xs font-mono placeholder:text-[#444] px-2 focus:outline-none focus:border-[#569cd6]"
+                  />
+                  <Button
+                    onClick={handleRun}
+                    disabled={running || !activeFile}
+                    size="sm"
+                    className="h-6 px-2 bg-green-700 hover:bg-green-600 text-white text-xs"
+                  >
+                    {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                    <span className="ml-1 hidden sm:inline">Run</span>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
           {terminalOpen && (
-            <div className="h-48 sm:h-64 bg-[#0d0d0d] border-t border-[#3c3c3c] flex flex-col flex-shrink-0">
-              <div className="flex-1 overflow-auto p-2 sm:p-3 font-mono text-xs">
-                {terminalLines.map((line, i) => (
-                  <div key={i} className={`leading-5 whitespace-pre-wrap break-all ${
-                    line.type === "stdout" ? "text-[#4ec9b0]" :
-                    line.type === "stderr" ? "text-[#f44747]" :
-                    line.type === "stdin"  ? "text-[#dcdcaa]" :
-                    line.type === "system" ? "text-[#569cd6]" :
-                    "text-[#808080]"
-                  }`}>
-                    {line.type === "system" && <span className="text-[#808080] mr-1">{">"}</span>}
-                    {line.text}
-                  </div>
-                ))}
-                {running && (
-                  <div className="flex items-center gap-2 text-[#808080] leading-5">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>Running...</span>
-                  </div>
-                )}
-                <div ref={terminalEndRef} />
+            <div className="h-52 sm:h-64 md:h-72 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden">
+              <div className={`absolute inset-0 ${terminalTab === "output" ? "z-10" : "z-0 opacity-0 pointer-events-none"}`}>
+                <XTermTerminal ref={xtermOutputRef} noShell className="h-full" />
               </div>
-
-              <div className="border-t border-[#2d2d30] bg-[#1a1a1a] px-2 sm:px-3 py-1.5 flex-shrink-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[#dcdcaa] text-xs font-mono select-none">
-                    stdin {">"} <span className="text-[#555] hidden sm:inline">program input (one value per line)</span>
-                  </span>
-                  <Button onClick={handleRun} disabled={running || !activeFile} size="sm" variant="ghost"
-                    className="h-6 px-2 text-green-500">
-                    <Play className="h-3 w-3 mr-1" />
-                    <span className="text-xs">Run</span>
-                  </Button>
-                </div>
-                <textarea
-                  ref={stdinRef}
-                  value={stdinInput}
-                  onChange={(e) => setStdinInput(e.target.value)}
-                  onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); } }}
-                  placeholder="Type input values here (one per line). Ctrl+Enter to run."
-                  rows={2}
-                  className="w-full bg-[#0d0d0d] border border-[#2d2d30] rounded text-white text-xs font-mono placeholder:text-[#555] p-2 resize-none focus:outline-none focus:border-[#569cd6]"
-                />
+              <div className={`absolute inset-0 ${terminalTab === "shell" ? "z-10" : "z-0 opacity-0 pointer-events-none"}`}>
+                <XTermTerminal ref={xtermShellRef} className="h-full" />
               </div>
             </div>
           )}

@@ -536,6 +536,24 @@ export default function IDE() {
             )}
           </div>
 
+          {activeFile && activeTabId && (
+            <div className="flex items-center px-3 py-0.5 bg-[#1e1e1e] border-b border-[#2d2d2d] flex-shrink-0 gap-1 overflow-hidden">
+              {getNodePath(tree, activeTabId).split("/").map((part, i, arr) => (
+                <span key={i} className="flex items-center gap-1 flex-shrink-0">
+                  {i > 0 && <span className="text-gray-700 text-[10px]">/</span>}
+                  <span className={`text-[10px] truncate ${i === arr.length - 1 ? "text-gray-400" : "text-gray-600"}`}>
+                    {part}
+                  </span>
+                </span>
+              ))}
+              {repo && (
+                <span className="ml-auto text-[10px] text-gray-700 flex-shrink-0 hidden sm:block">
+                  saves to → <span className="text-gray-500">{repo.name}/{getNodePath(tree, activeTabId)}</span>
+                </span>
+              )}
+            </div>
+          )}
+
           <div className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden`}>
             {activeFile ? (
               <CodeMirror

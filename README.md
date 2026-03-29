@@ -97,7 +97,7 @@ Firebase is optional — the app runs in guest mode without it.
 
 ---
 
-## Deploy to Render
+## Deploy to Render project
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com)
 

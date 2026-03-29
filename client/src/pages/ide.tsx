@@ -60,6 +60,7 @@ export default function IDE() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [loadingRepoFiles, setLoadingRepoFiles] = useState(false);
+  const [needsAutoLoad, setNeedsAutoLoad] = useState(false);
 
   const isGuest = !user;
 
@@ -68,7 +69,16 @@ export default function IDE() {
 
   useEffect(() => {
     const saved = localStorage.getItem("bm_selected_repo");
-    if (saved) { try { setRepo(JSON.parse(saved)); } catch {} }
+    if (saved) {
+      try {
+        const savedRepo: GithubRepo = JSON.parse(saved);
+        setRepo(savedRepo);
+        const lastLoaded = localStorage.getItem("bm_loaded_repo");
+        if (lastLoaded !== savedRepo.full_name) {
+          setNeedsAutoLoad(true);
+        }
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -97,6 +107,14 @@ export default function IDE() {
     if (activeTabId) localStorage.setItem("bm_active_tab", activeTabId);
     else localStorage.removeItem("bm_active_tab");
   }, [activeTabId]);
+
+  useEffect(() => {
+    if (!loading && needsAutoLoad && repo) {
+      setNeedsAutoLoad(false);
+      loadRepoFiles(repo);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, needsAutoLoad, repo]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -246,6 +264,7 @@ export default function IDE() {
       };
       const firstNode = findFirst(newTree);
       if (firstNode) { setOpenTabs([firstNode.id]); setActiveTabId(firstNode.id); }
+      localStorage.setItem("bm_loaded_repo", repoToLoad.full_name);
       toast({ title: `Loaded ${contentData.files.length} files`, description: `From ${repoToLoad.full_name}` });
     } catch (err: any) {
       toast({ title: "Failed to load repo files", description: err.message, variant: "destructive" });
@@ -492,6 +511,7 @@ export default function IDE() {
             onToggle={toggleFolder}
             onPushFolder={handlePushFolder}
             onPushAll={handlePushAll}
+            loading={loadingRepoFiles}
           />
         </div>
 

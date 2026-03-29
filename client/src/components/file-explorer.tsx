@@ -16,6 +16,7 @@ interface Props {
   onToggle: (id: string) => void;
   onPushFolder: (nodes: FileNode[], folderPath: string) => void;
   onPushAll: () => void;
+  loading?: boolean;
 }
 
 function FileIcon({ name }: { name: string }) {
@@ -203,7 +204,7 @@ function NodeRow({
 
 export default function FileExplorer({
   tree, activeFileId, onOpenFile, onCreate,
-  onDelete, onRename, onToggle, onPushFolder, onPushAll,
+  onDelete, onRename, onToggle, onPushFolder, onPushAll, loading = false,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
 
@@ -215,7 +216,13 @@ export default function FileExplorer({
   const allFileCount = collectFiles(tree).length;
 
   return (
-    <div className="flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c]" style={{ width: 220, minWidth: 220 }}>
+    <div className="flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c] relative" style={{ width: 220, minWidth: 220 }}>
+      {loading && (
+        <div className="absolute inset-0 z-20 bg-[#252526]/80 flex flex-col items-center justify-center gap-2">
+          <div className="h-5 w-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+          <span className="text-[11px] text-gray-400">Loading files…</span>
+        </div>
+      )}
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0 border-b border-[#3c3c3c]">
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Explorer</span>
         <div className="flex items-center gap-0.5">

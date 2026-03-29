@@ -626,37 +626,58 @@ export default function IDE() {
               <div className="flex-1" />
 
               {terminalOpen && terminalTab === "output" && (
-                <div className="flex items-center gap-1 pr-1">
-                  <span className="text-[10px] text-gray-600 hidden sm:inline font-mono">stdin:</span>
-                  <input
-                    value={stdinInput}
-                    onChange={(e) => setStdinInput(e.target.value)}
-                    onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); } }}
-                    placeholder="program input…"
-                    className="h-6 w-28 sm:w-40 bg-[#1a1a1a] border border-[#3c3c3c] rounded text-white text-xs font-mono placeholder:text-[#444] px-2 focus:outline-none focus:border-[#569cd6]"
-                  />
-                  <Button
-                    onClick={handleRun}
-                    disabled={running || !activeFile}
-                    size="sm"
-                    className="h-6 px-2 bg-green-700 hover:bg-green-600 text-white text-xs"
-                  >
-                    {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                    <span className="ml-1 hidden sm:inline">Run</span>
-                  </Button>
-                </div>
+                <Button
+                  onClick={handleRun}
+                  disabled={running || !activeFile}
+                  size="sm"
+                  className="h-6 px-3 mr-1 bg-green-700 hover:bg-green-600 text-white text-xs"
+                >
+                  {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                  <span className="ml-1">Run</span>
+                </Button>
               )}
             </div>
           </div>
 
           {terminalOpen && (
-            <div className="h-52 sm:h-64 md:h-72 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden">
-              <div className={`absolute inset-0 ${terminalTab === "output" ? "z-10" : "z-0 opacity-0 pointer-events-none"}`}>
-                <XTermTerminal ref={xtermOutputRef} noShell className="h-full" />
+            <div className="h-64 sm:h-72 md:h-80 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden">
+
+              {/* Output tab — conditionally rendered, flex-col with stdin at bottom */}
+              {terminalTab === "output" && (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <XTermTerminal ref={xtermOutputRef} noShell className="h-full" />
+                  </div>
+                  <div className="flex-shrink-0 border-t border-[#2d2d2d] bg-[#141414]">
+                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e1e]">
+                      <span className="text-[10px] text-[#569cd6] font-mono font-semibold tracking-wide">stdin</span>
+                      <span className="text-[10px] text-gray-600">— program input (one value per line, Ctrl+Enter to run)</span>
+                    </div>
+                    <textarea
+                      value={stdinInput}
+                      onChange={(e) => setStdinInput(e.target.value)}
+                      onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); } }}
+                      placeholder={"5\nhello world\n3.14"}
+                      rows={3}
+                      spellCheck={false}
+                      className="w-full bg-transparent text-white text-xs font-mono placeholder:text-[#2e2e2e] px-3 py-2 resize-none focus:outline-none leading-relaxed"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Shell xterm — always mounted to keep session alive, hidden behind Output */}
+              <div className={terminalTab === "output"
+                ? "absolute inset-0 opacity-0 pointer-events-none"
+                : "absolute inset-0"
+              }>
+                <XTermTerminal
+                  ref={xtermShellRef}
+                  className="h-full"
+                  onReady={() => xtermShellRef.current?.focus()}
+                />
               </div>
-              <div className={`absolute inset-0 ${terminalTab === "shell" ? "z-10" : "z-0 opacity-0 pointer-events-none"}`}>
-                <XTermTerminal ref={xtermShellRef} className="h-full" />
-              </div>
+
             </div>
           )}
         </div>

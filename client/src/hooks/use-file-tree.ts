@@ -212,5 +212,20 @@ export function useFileTree() {
     [tree, persist]
   );
 
-  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles };
+  const replaceWithFiles = useCallback(
+    (files: { path: string; content: string }[]): FileNode[] => {
+      let next: FileNode[] = [];
+      for (const { path, content } of files) {
+        const parts = path.split("/").filter(Boolean);
+        if (parts.length > 0) {
+          next = insertPath(next, parts, content);
+        }
+      }
+      persist(next);
+      return next;
+    },
+    [persist]
+  );
+
+  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles };
 }

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
-  Terminal, User, X, Upload, Menu, Github,
+  Terminal, User, X, Upload, Menu, Github, CloudDownload,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -16,7 +16,7 @@ import { java } from "@codemirror/lang-java";
 import { python } from "@codemirror/lang-python";
 import type { TargetLanguage, GithubRepo, RunResult } from "@shared/schema";
 import { targetLabels, languageGroups } from "@shared/schema";
-import { useFileTree, findNodeById, collectFiles } from "@/hooks/use-file-tree";
+import { useFileTree, findNodeById, collectFiles, getNodePath } from "@/hooks/use-file-tree";
 import type { FileNode } from "@/hooks/use-file-tree";
 import FileExplorer from "@/components/file-explorer";
 import GitHubImportModal from "@/components/github-import-modal";
@@ -41,7 +41,7 @@ export default function IDE() {
   const tabsRef = useRef<HTMLDivElement>(null);
   const stdinRef = useRef<HTMLTextAreaElement>(null);
 
-  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles } = useFileTree();
+  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles } = useFileTree();
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
     const saved = localStorage.getItem("bm_open_tabs");
@@ -62,6 +62,7 @@ export default function IDE() {
   const [repo, setRepo] = useState<GithubRepo | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [loadingRepoFiles, setLoadingRepoFiles] = useState(false);
 
   const isGuest = !user;
 
@@ -212,20 +213,71 @@ export default function IDE() {
     }
   };
 
+  const loadRepoFiles = async (targetRepo?: GithubRepo) => {
+    const repoToLoad = targetRepo ?? repo;
+    if (!repoToLoad) return;
+    const token = githubToken;
+    setLoadingRepoFiles(true);
+    const [owner, repoName] = repoToLoad.full_name.split("/");
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers["X-GitHub-Token"] = token;
+      const treeRes = await fetch(`/api/github/repo-tree?owner=${owner}&repo=${repoName}`, { headers });
+      if (!treeRes.ok) throw new Error("Failed to load repo tree");
+      const treeData = await treeRes.json();
+      const supportedExts = new Set(["c","cpp","cc","java","py","js","ts","jsx","tsx","php","rb","go","rs","dart","sql","sh","bash","md","txt","json"]);
+      const codePaths: string[] = (treeData.files as { path: string; size: number }[])
+        .filter((f) => supportedExts.has(f.path.split(".").pop()?.toLowerCase() ?? "") && f.size < 100000)
+        .slice(0, 40)
+        .map((f) => f.path);
+      if (codePaths.length === 0) {
+        toast({ title: "No files found", description: "This repo has no supported code files.", variant: "destructive" });
+        return;
+      }
+      const contentRes = await fetch("/api/github/import-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ owner, repo: repoName, branch: treeData.branch, paths: codePaths }),
+      });
+      if (!contentRes.ok) throw new Error("Failed to fetch file contents");
+      const contentData = await contentRes.json();
+      const newTree = replaceWithFiles(contentData.files as { path: string; content: string }[]);
+      localStorage.setItem("bm_open_tabs", "[]");
+      localStorage.removeItem("bm_active_tab");
+      setOpenTabs([]);
+      setActiveTabId(null);
+      const findFirst = (nodes: FileNode[]): FileNode | null => {
+        for (const n of nodes) {
+          if (n.type === "file") return n;
+          if (n.type === "folder") { const f = findFirst(n.children); if (f) return f; }
+        }
+        return null;
+      };
+      const firstNode = findFirst(newTree);
+      if (firstNode) { setOpenTabs([firstNode.id]); setActiveTabId(firstNode.id); }
+      toast({ title: `Loaded ${contentData.files.length} files`, description: `From ${repoToLoad.full_name}` });
+    } catch (err: any) {
+      toast({ title: "Failed to load repo files", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingRepoFiles(false);
+    }
+  };
+
   const handleSaveFile = async () => {
     if (!activeFile || !githubToken || !repo) {
       toast({ title: "Cannot save", description: repo ? "No GitHub token" : "No repository selected", variant: "destructive" });
       return;
     }
     setSaving(true);
+    const filePath = activeTabId ? (getNodePath(tree, activeTabId) || activeFile.name) : activeFile.name;
     try {
       const res = await fetch("/api/github/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-GitHub-Token": githubToken },
-        body: JSON.stringify({ repo: repo.full_name, path: activeFile.name, content: activeFile.content, message: `Update ${activeFile.name} via BM Compiler` }),
+        body: JSON.stringify({ repo: repo.full_name, path: filePath, content: activeFile.content, message: `Update ${filePath} via BM Compiler` }),
       });
       const data = await res.json();
-      if (data.success) toast({ title: "Saved", description: `${activeFile.name} pushed to ${repo.name}` });
+      if (data.success) toast({ title: "Saved", description: `${filePath} pushed to ${repo.name}` });
       else throw new Error(data.error || "Failed");
     } catch (err: any) {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
@@ -389,14 +441,26 @@ export default function IDE() {
 
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {!isGuest && repo && (
-            <button
-              onClick={() => navigate("/repo-setup")}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
-              title={`Connected to ${repo.full_name}`}
-            >
-              <FolderGit2 className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">{repo.name}</span>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => navigate("/repo-setup")}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
+                title={`Connected to ${repo.full_name}`}
+              >
+                <FolderGit2 className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline max-w-[80px] truncate">{repo.name}</span>
+              </button>
+              <button
+                onClick={() => loadRepoFiles()}
+                disabled={loadingRepoFiles}
+                title={`Load files from ${repo.full_name}`}
+                className="p-1 rounded hover:bg-[#3c3c3c] text-gray-400 hover:text-green-400 disabled:opacity-50"
+              >
+                {loadingRepoFiles
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <CloudDownload className="h-3.5 w-3.5" />}
+              </button>
+            </div>
           )}
           {isGuest ? (
             <Button variant="ghost" size="sm" onClick={() => navigate("/")}

@@ -556,8 +556,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           generatedC.push(outC);
         }
 
+        const flexBisonDefinesMain = [...lexFiles, ...bisonFiles].some((f) =>
+          /int\s+main\s*\(/.test(f.content)
+        );
         const userC = files
-          .filter((f) => f.path.endsWith(".c") && !f.path.endsWith("lex.yy.c") && !f.path.includes(".tab.c"))
+          .filter((f) => {
+            if (!f.path.endsWith(".c")) return false;
+            if (f.path.endsWith("lex.yy.c") || f.path.includes(".tab.c")) return false;
+            if (flexBisonDefinesMain && /int\s+main\s*\(/.test(f.content)) return false;
+            return true;
+          })
           .map((f) => join(workDir, f.path));
 
         const allC = [...generatedC, ...userC];

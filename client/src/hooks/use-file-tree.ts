@@ -38,10 +38,17 @@ function makeFolder(name: string): FileNode {
   };
 }
 
+function migrateLanguages(nodes: FileNode[]): FileNode[] {
+  return nodes.map((n) => {
+    if (n.type === "folder") return { ...n, children: migrateLanguages(n.children ?? []) };
+    return { ...n, language: langFromFilename(n.name) };
+  });
+}
+
 function loadTree(): FileNode[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return migrateLanguages(JSON.parse(raw));
   } catch {}
   return [makeFile("main.c")];
 }

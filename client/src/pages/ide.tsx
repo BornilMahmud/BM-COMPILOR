@@ -836,7 +836,7 @@ export default function IDE() {
                 <XTermTerminal
                   ref={xtermShellRef}
                   className="h-full"
-                  onReady={() => xtermShellRef.current?.focus()}
+                  onReady={() => { if (terminalTab === "shell") xtermShellRef.current?.focus(); }}
                 />
               </div>
 

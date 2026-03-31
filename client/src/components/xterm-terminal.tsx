@@ -25,6 +25,8 @@ const XTermTerminal = forwardRef<XTermHandle, Props>(({ className = "", noShell 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onReadyRef.current = onReady; });
 
   const sendResize = useCallback((term: Terminal, ws: WebSocket) => {
     if (ws.readyState === WebSocket.OPEN) {
@@ -42,7 +44,7 @@ const XTermTerminal = forwardRef<XTermHandle, Props>(({ className = "", noShell 
       if (!mountedRef.current) { ws.close(); return; }
       fit.fit();
       sendResize(term, ws);
-      onReady?.();
+      onReadyRef.current?.();
     };
 
     ws.onmessage = (ev) => {
@@ -66,7 +68,7 @@ const XTermTerminal = forwardRef<XTermHandle, Props>(({ className = "", noShell 
         ws.send(JSON.stringify({ type: "input", data }));
       }
     });
-  }, [onReady, sendResize]);
+  }, [sendResize]);
 
   useImperativeHandle(ref, () => ({
     writeOutput: (text: string, isError = false) => {

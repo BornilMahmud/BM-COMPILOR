@@ -234,10 +234,13 @@ export default function IDE() {
       const treeRes = await fetch(`/api/github/repo-tree?owner=${owner}&repo=${repoName}`, { headers });
       if (!treeRes.ok) throw new Error("Failed to load repo tree");
       const treeData = await treeRes.json();
-      const supportedExts = new Set(["c","cpp","cc","java","py","js","ts","jsx","tsx","php","rb","go","rs","dart","sql","mysql","ora","sh","bash","md","txt","json"]);
+      const supportedExts = new Set(["c","cpp","cc","cxx","h","hpp","java","py","js","mjs","ts","jsx","tsx","php","rb","go","rs","dart","sql","mysql","ora","sh","bash","md","txt","json","yaml","yml","toml","xml","html","css","scss","l","y"]);
       const codePaths: string[] = (treeData.files as { path: string; size: number }[])
-        .filter((f) => supportedExts.has(f.path.split(".").pop()?.toLowerCase() ?? "") && f.size < 100000)
-        .slice(0, 40)
+        .filter((f) => {
+          const ext = f.path.split(".").pop()?.toLowerCase() ?? "";
+          return supportedExts.has(ext) && f.size < 500000;
+        })
+        .slice(0, 300)
         .map((f) => f.path);
       if (codePaths.length === 0) {
         toast({ title: "No files found", description: "This repo has no supported code files.", variant: "destructive" });

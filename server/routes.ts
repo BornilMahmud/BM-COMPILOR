@@ -448,25 +448,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "owner, repo, branch, and paths[] required" });
       }
       const token = getGithubToken(req);
-      const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const toFetch = paths.slice(0, 40);
-      const results = await Promise.all(
-        toFetch.map(async (p) => {
-          const fullPath = subPath ? `${subPath.replace(/\/$/, "")}/${p}` : p;
-          const r = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/contents/${fullPath}?ref=${branch}`,
-            { headers }
-          );
-          if (!r.ok) return null;
-          const data = await r.json();
-          try {
-            const content = Buffer.from((data.content as string).replace(/\n/g, ""), "base64").toString("utf8");
-            return { path: p, content };
-          } catch { return null; }
-        })
-      );
-      return res.json({ files: results.filter(Boolean) });
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const toFetch = paths.slice(0, 300);
+      const BATCH = 20;
+      const allResults: ({ path: string; content: string } | null)[] = [];
+
+      for (let i = 0; i < toFetch.length; i += BATCH) {
+        const batch = toFetch.slice(i, i + BATCH);
+        const batchResults = await Promise.all(
+          batch.map(async (p) => {
+            const fullPath = subPath ? `${subPath.replace(/\/$/, "")}/${p}` : p;
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURIComponent(fullPath).replace(/%2F/g, "/")}`;
+            try {
+              const r = await fetch(rawUrl, { headers: authHeaders });
+              if (!r.ok) return null;
+              const content = await r.text();
+              return { path: p, content };
+            } catch { return null; }
+          })
+        );
+        allResults.push(...batchResults);
+      }
+
+      return res.json({ files: allResults.filter(Boolean) });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }

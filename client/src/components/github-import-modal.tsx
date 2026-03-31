@@ -24,7 +24,7 @@ interface Props {
 }
 
 const RECENT_KEY = "bm_recent_imports";
-const SUPPORTED_EXTS = new Set(["c","cpp","cc","java","py","js","ts","jsx","tsx","php","rb","go","rs","dart","sql","sh","bash","txt","json","yaml","yml","toml","md","html","css"]);
+const SUPPORTED_EXTS = new Set(["c","cpp","cc","cxx","h","hpp","java","py","js","mjs","ts","jsx","tsx","php","rb","go","rs","dart","sql","mysql","ora","sh","bash","txt","json","yaml","yml","toml","md","html","css","scss","xml","l","y"]);
 
 function parseGitHubUrl(raw: string): { owner: string; repo: string; branch?: string; subPath?: string } | null {
   try {
@@ -310,7 +310,7 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
           <div className="px-4 py-3 bg-[#252526] border-t border-[#3c3c3c] flex items-center justify-between flex-shrink-0 gap-3">
             <span className="text-xs text-gray-400">
               {selected.size} file{selected.size !== 1 ? "s" : ""} selected
-              {selected.size > 40 && <span className="text-yellow-500 ml-1">(max 40 at once)</span>}
+              {selected.size > 300 && <span className="text-yellow-500 ml-1">(max 300 at once)</span>}
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 h-8 text-xs">Cancel</Button>
@@ -322,7 +322,7 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
               >
                 {importing
                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Importing...</>
-                  : <><Download className="h-3.5 w-3.5 mr-1" />Import {Math.min(selected.size, 40)} files</>}
+                  : <><Download className="h-3.5 w-3.5 mr-1" />Import {Math.min(selected.size, 300)} files</>}
               </Button>
             </div>
           </div>

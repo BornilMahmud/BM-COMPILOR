@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
   Terminal, User, X, Upload, Menu, Github, CloudDownload, SquareTerminal,
-  RefreshCw, Download,
+  RefreshCw, Download, Plus, RotateCcw,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -34,13 +34,23 @@ function getEditorLang(target: TargetLanguage) {
   }
 }
 
+interface ShellSession {
+  id: string;
+  label: string;
+  revision: number;
+}
+
 export default function IDE() {
   const { user, loading, githubToken, logout } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const tabsRef = useRef<HTMLDivElement>(null);
   const xtermOutputRef = useRef<XTermHandle>(null);
-  const xtermShellRef = useRef<XTermHandle>(null);
+  const shellHandlesMap = useRef<Map<string, XTermHandle>>(new Map());
+
+  const [shellSessions, setShellSessions] = useState<ShellSession[]>(() => [
+    { id: "shell-1", label: "bash 1", revision: 0 },
+  ]);
 
   const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll } = useFileTree();
 
@@ -57,7 +67,7 @@ export default function IDE() {
   const [syncingShell, setSyncingShell] = useState(false);
   const [lastBuild, setLastBuild] = useState<{ binary: string; name: string } | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(true);
-  const [terminalTab, setTerminalTab] = useState<"output" | "shell">("output");
+  const [terminalTab, setTerminalTab] = useState<string>("output");
   const [stdinLines, setStdinLines] = useState<string[]>([]);
   const [stdinDraft, setStdinDraft] = useState("");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
@@ -285,10 +295,12 @@ export default function IDE() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Sync failed");
-      setTerminalTab("shell");
+      const shellId = terminalTab !== "output" && shellSessions.some(s => s.id === terminalTab)
+        ? terminalTab : (shellSessions[0]?.id ?? "shell-1");
+      setTerminalTab(shellId);
       setTimeout(() => {
-        xtermShellRef.current?.sendInput("ls\r");
-        xtermShellRef.current?.focus();
+        shellHandlesMap.current.get(shellId)?.sendInput("ls\r");
+        shellHandlesMap.current.get(shellId)?.focus();
       }, 120);
       toast({ title: "Synced to Shell", description: `${data.count} file(s) written to ${data.path}` });
     } catch (err: any) {
@@ -338,11 +350,12 @@ export default function IDE() {
       `git remote remove origin 2>/dev/null; git remote add origin '${remoteUrl}'`,
       `git push -f origin HEAD:main && echo "✓ Pushed to ${repo.full_name}" || echo "✗ Push failed"`,
     ].join(" && ");
-    setTerminalTab("shell");
+    const shellId = shellSessions[0]?.id ?? "shell-1";
+    setTerminalTab(shellId);
     setTerminalOpen(true);
     setTimeout(() => {
-      xtermShellRef.current?.sendInput(cmds + "\r");
-      xtermShellRef.current?.focus();
+      shellHandlesMap.current.get(shellId)?.sendInput(cmds + "\r");
+      shellHandlesMap.current.get(shellId)?.focus();
     }, 150);
   };
 
@@ -359,11 +372,12 @@ export default function IDE() {
   };
 
   const handleRunInShell = () => {
-    setTerminalTab("shell");
+    const shellId = shellSessions[0]?.id ?? "shell-1";
+    setTerminalTab(shellId);
     setTerminalOpen(true);
     setTimeout(() => {
-      xtermShellRef.current?.sendInput("./a.out\r");
-      xtermShellRef.current?.focus();
+      shellHandlesMap.current.get(shellId)?.sendInput("./a.out\r");
+      shellHandlesMap.current.get(shellId)?.focus();
     }, 120);
   };
 
@@ -498,6 +512,42 @@ export default function IDE() {
     localStorage.removeItem("bm_active_tab");
     await logout();
     navigate("/");
+  };
+
+  const activeShellHandle = (): XTermHandle | null => {
+    const id = terminalTab === "output" ? (shellSessions[0]?.id ?? "") : terminalTab;
+    return shellHandlesMap.current.get(id) ?? null;
+  };
+
+  const addShell = () => {
+    const id = crypto.randomUUID();
+    const n = shellSessions.length + 1;
+    setShellSessions((prev) => [...prev, { id, label: `bash ${n}`, revision: 0 }]);
+    setTerminalOpen(true);
+    setTerminalTab(id);
+    setTimeout(() => { shellHandlesMap.current.get(id)?.focus(); }, 150);
+  };
+
+  const removeShell = (id: string) => {
+    setShellSessions((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      if (next.length === 0) {
+        setTerminalTab("output");
+      } else if (terminalTab === id) {
+        const idx = prev.findIndex((s) => s.id === id);
+        const fallback = next[Math.max(0, idx - 1)];
+        setTerminalTab(fallback.id);
+        setTimeout(() => { shellHandlesMap.current.get(fallback.id)?.focus(); }, 50);
+      }
+      return next;
+    });
+    shellHandlesMap.current.delete(id);
+  };
+
+  const refreshShell = (id: string) => {
+    shellHandlesMap.current.delete(id);
+    setShellSessions((prev) => prev.map((s) => s.id === id ? { ...s, revision: s.revision + 1 } : s));
+    setTimeout(() => { shellHandlesMap.current.get(id)?.focus(); }, 200);
   };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -767,7 +817,7 @@ export default function IDE() {
                 <>
                   <button
                     onClick={() => setTerminalTab("output")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors flex-shrink-0 ${
                       terminalTab === "output"
                         ? "border-blue-500 text-white"
                         : "border-transparent text-gray-500 hover:text-gray-300"
@@ -776,16 +826,51 @@ export default function IDE() {
                     <Play className="h-3 w-3" />
                     Output
                   </button>
+
+                  {shellSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className={`flex items-center flex-shrink-0 border-b-2 transition-colors ${
+                        terminalTab === session.id ? "border-blue-500" : "border-transparent"
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          setTerminalTab(session.id);
+                          setTimeout(() => shellHandlesMap.current.get(session.id)?.focus(), 50);
+                        }}
+                        className={`flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-xs transition-colors ${
+                          terminalTab === session.id ? "text-white" : "text-gray-500 hover:text-gray-300"
+                        }`}
+                      >
+                        <SquareTerminal className="h-3 w-3" />
+                        {session.label}
+                      </button>
+                      {terminalTab === session.id && (
+                        <button
+                          onClick={() => refreshShell(session.id)}
+                          title="Restart terminal"
+                          className="p-1 text-gray-500 hover:text-emerald-400 rounded transition-colors"
+                        >
+                          <RotateCcw className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => removeShell(session.id)}
+                        title="Close terminal"
+                        className="p-1 text-gray-600 hover:text-red-400 rounded transition-colors"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+
                   <button
-                    onClick={() => { setTerminalTab("shell"); setTimeout(() => xtermShellRef.current?.focus(), 50); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                      terminalTab === "shell"
-                        ? "border-blue-500 text-white"
-                        : "border-transparent text-gray-500 hover:text-gray-300"
-                    }`}
+                    onClick={addShell}
+                    title="New terminal"
+                    className="flex items-center px-2 py-1.5 text-gray-500 hover:text-white transition-colors flex-shrink-0"
                   >
-                    <SquareTerminal className="h-3 w-3" />
-                    Shell
+                    <Plus className="h-3 w-3" />
                   </button>
                 </>
               )}
@@ -907,17 +992,25 @@ export default function IDE() {
                 </div>
               )}
 
-              {/* Shell xterm — always mounted to keep session alive, hidden behind Output */}
-              <div className={terminalTab === "output"
-                ? "absolute inset-0 opacity-0 pointer-events-none"
-                : "absolute inset-0"
-              }>
-                <XTermTerminal
-                  ref={xtermShellRef}
-                  className="h-full"
-                  onReady={() => { if (terminalTab === "shell") xtermShellRef.current?.focus(); }}
-                />
-              </div>
+              {/* All shell instances — always mounted to keep sessions alive, only active one visible */}
+              {shellSessions.map((session) => (
+                <div
+                  key={`${session.id}-${session.revision}`}
+                  className="absolute inset-0"
+                  style={{ display: terminalTab === session.id ? "block" : "none" }}
+                >
+                  <XTermTerminal
+                    ref={(handle) => {
+                      if (handle) shellHandlesMap.current.set(session.id, handle);
+                      else shellHandlesMap.current.delete(session.id);
+                    }}
+                    className="h-full"
+                    onReady={() => {
+                      if (terminalTab === session.id) shellHandlesMap.current.get(session.id)?.focus();
+                    }}
+                  />
+                </div>
+              ))}
 
           </div>
         </div>

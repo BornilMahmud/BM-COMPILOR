@@ -235,7 +235,7 @@ export function useFileTree() {
   );
 
   const clearAll = useCallback(() => {
-    const blank = makeFile("main.c", defaultCode("c"));
+    const blank = makeFile("main.c", defaultCode["c"]);
     persist([blank]);
     return blank;
   }, [persist]);

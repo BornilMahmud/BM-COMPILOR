@@ -7,6 +7,7 @@ import "@xterm/xterm/css/xterm.css";
 export interface XTermHandle {
   writeOutput: (text: string, isError?: boolean) => void;
   writeCommand: (cmd: string) => void;
+  sendInput: (text: string) => void;
   clear: () => void;
   focus: () => void;
 }
@@ -80,6 +81,11 @@ const XTermTerminal = forwardRef<XTermHandle, Props>(({ className = "", noShell 
     writeCommand: (cmd: string) => {
       if (!termRef.current) return;
       termRef.current.write(`\r\n\x1b[90m$ ${cmd}\x1b[0m\r\n`);
+    },
+    sendInput: (text: string) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "input", data: text }));
+      }
     },
     clear: () => { termRef.current?.clear(); },
     focus: () => { termRef.current?.focus(); },

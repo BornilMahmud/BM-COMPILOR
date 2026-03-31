@@ -1,13 +1,15 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { execFile, spawn } from "child_process";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir, rm, readFile, access, copyFile } from "fs/promises";
 import { join, dirname, basename } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import path from "path";
 import { existsSync } from "fs";
 import { runRequestSchema, createRepoSchema, commitFileSchema } from "@shared/schema.js";
+
+export const SHELL_WORKSPACE = "/tmp/bm_workspace";
 
 const IS_WIN = process.platform === "win32";
 
@@ -31,12 +33,14 @@ function spawnDirect(
   cmd: string,
   args: string[],
   stdinText: string | undefined,
-  timeout = 15000
+  timeout = 15000,
+  cwd?: string
 ): Promise<any> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       stdio: ["pipe", "pipe", "pipe"],
       shell: IS_WIN,
+      ...(cwd ? { cwd } : {}),
     });
 
     let stdout = "";
@@ -472,6 +476,130 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       return res.json({ files: allResults.filter(Boolean) });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /* ── Shell workspace sync ── */
+  app.post("/api/shell/sync", async (req, res) => {
+    try {
+      const { files } = req.body as { files: { path: string; content: string }[] };
+      if (!Array.isArray(files)) return res.status(400).json({ error: "files[] required" });
+      await mkdir(SHELL_WORKSPACE, { recursive: true });
+      await Promise.all(
+        files.map(async ({ path: p, content }) => {
+          const fp = join(SHELL_WORKSPACE, p);
+          await mkdir(dirname(fp), { recursive: true });
+          await writeFile(fp, content);
+        })
+      );
+      return res.json({ ok: true, path: SHELL_WORKSPACE, count: files.length });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /* ── Flex + Bison full pipeline ── */
+  app.post("/api/run-flex-bison", async (req, res) => {
+    try {
+      const { files, stdin } = req.body as {
+        files: { path: string; content: string }[];
+        stdin?: string;
+      };
+      if (!Array.isArray(files) || files.length === 0) {
+        return res.status(400).json({ error: "files[] required" });
+      }
+
+      const id = randomUUID().slice(0, 8);
+      const workDir = join(tmpdir(), `bmflex_${id}`);
+      await mkdir(workDir, { recursive: true });
+
+      try {
+        await Promise.all(
+          files.map(async ({ path: p, content }) => {
+            const fp = join(workDir, p);
+            await mkdir(dirname(fp), { recursive: true });
+            await writeFile(fp, content);
+          })
+        );
+
+        const lexFiles = files.filter((f) => f.path.endsWith(".l"));
+        const bisonFiles = files.filter((f) => f.path.endsWith(".y"));
+        const generatedC: string[] = [];
+        let stepOutput = "";
+
+        for (const lf of lexFiles) {
+          const inFile = join(workDir, lf.path);
+          const outFile = join(workDir, "lex.yy.c");
+          const r = await spawnDirect("flex", ["-o", outFile, inFile], undefined, 30000);
+          if (r.stdout) stepOutput += r.stdout;
+          if (r.stderr) stepOutput += r.stderr;
+          if (!r.ok) {
+            return res.json({ ok: false, exit_code: r.exit_code, stdout: stepOutput, stderr: r.stderr, phase: "flex", step: `flex ${lf.path}` });
+          }
+          generatedC.push(outFile);
+        }
+
+        for (const yf of bisonFiles) {
+          const inFile = join(workDir, yf.path);
+          const base = basename(yf.path, ".y");
+          const outC = join(workDir, `${base}.tab.c`);
+          const outH = join(workDir, `${base}.tab.h`);
+          const r = await spawnDirect("bison", ["-d", "-o", outC, inFile], undefined, 30000);
+          if (r.stdout) stepOutput += r.stdout;
+          if (r.stderr) stepOutput += r.stderr;
+          if (!r.ok) {
+            return res.json({ ok: false, exit_code: r.exit_code, stdout: stepOutput, stderr: r.stderr, phase: "bison", step: `bison -d ${yf.path}` });
+          }
+          try { await access(outH); } catch {}
+          generatedC.push(outC);
+        }
+
+        const userC = files
+          .filter((f) => f.path.endsWith(".c") && !f.path.endsWith("lex.yy.c") && !f.path.includes(".tab.c"))
+          .map((f) => join(workDir, f.path));
+
+        const allC = [...generatedC, ...userC];
+
+        if (allC.length === 0) {
+          return res.json({ ok: true, exit_code: 0, stdout: stepOutput || "Flex/Bison source processed. No C files to compile.", stderr: "", phase: "flex-bison" });
+        }
+
+        const outBin = join(workDir, "a.out");
+        const gccResult = await spawnDirect("gcc", [...allC, "-o", outBin, "-lm"], undefined, 30000);
+        if (gccResult.stdout) stepOutput += gccResult.stdout;
+        if (!gccResult.ok) {
+          return res.json({ ok: false, exit_code: gccResult.exit_code, stdout: stepOutput, stderr: gccResult.stderr, phase: "compile" });
+        }
+
+        const runResult = await spawnDirect(outBin, [], stdin || undefined, 15000);
+
+        let binaryB64: string | undefined;
+        try { binaryB64 = (await readFile(outBin)).toString("base64"); } catch {}
+
+        try {
+          await mkdir(SHELL_WORKSPACE, { recursive: true });
+          await Promise.all(
+            files.map(async ({ path: p, content }) => {
+              const fp = join(SHELL_WORKSPACE, p);
+              await mkdir(dirname(fp), { recursive: true });
+              await writeFile(fp, content);
+            })
+          );
+          if (binaryB64) await copyFile(outBin, join(SHELL_WORKSPACE, "a.out"));
+        } catch {}
+
+        return res.json({
+          ...runResult,
+          phase: "run",
+          binary: binaryB64,
+          generated: generatedC.map((f) => basename(f)),
+          stdout: stepOutput + (runResult.stdout || ""),
+        });
+      } finally {
+        try { await rm(workDir, { recursive: true, force: true }); } catch {}
+      }
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }

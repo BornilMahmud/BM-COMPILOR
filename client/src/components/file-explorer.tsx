@@ -16,19 +16,58 @@ interface Props {
   onToggle: (id: string) => void;
   onPushFolder: (nodes: FileNode[], folderPath: string) => void;
   onPushAll: () => void;
+  onDropFiles?: (files: { path: string; content: string }[]) => void;
   loading?: boolean;
 }
 
 function FileIcon({ name }: { name: string }) {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   const colors: Record<string, string> = {
-    c: "text-blue-400", cpp: "text-blue-400", java: "text-orange-400",
-    py: "text-yellow-400", js: "text-yellow-300", ts: "text-blue-300",
-    php: "text-purple-400", rb: "text-red-400", go: "text-cyan-400",
-    rs: "text-orange-300", dart: "text-sky-400", sql: "text-green-400",
-    sh: "text-gray-300",
+    c: "text-blue-400", cpp: "text-blue-400", cc: "text-blue-400", cxx: "text-blue-400",
+    h: "text-purple-300", hpp: "text-purple-300",
+    java: "text-orange-400",
+    py: "text-yellow-400",
+    js: "text-yellow-300", mjs: "text-yellow-300",
+    ts: "text-blue-300", tsx: "text-blue-300",
+    php: "text-purple-400", rb: "text-red-400",
+    go: "text-cyan-400", rs: "text-orange-300",
+    dart: "text-sky-400",
+    sql: "text-green-400", mysql: "text-green-400", ora: "text-orange-400",
+    sh: "text-gray-300", bash: "text-gray-300",
+    l: "text-emerald-400",
+    y: "text-amber-400",
+    out: "text-lime-400", exe: "text-lime-400",
+    md: "text-blue-200", json: "text-yellow-200",
   };
   return <FileCode className={`h-3.5 w-3.5 flex-shrink-0 ${colors[ext] ?? "text-gray-400"}`} />;
+}
+
+async function readEntryAsFiles(
+  entry: FileSystemEntry,
+  prefix: string,
+  results: { path: string; content: string }[]
+): Promise<void> {
+  const p = prefix ? `${prefix}/${entry.name}` : entry.name;
+  if (entry.isFile) {
+    const fe = entry as FileSystemFileEntry;
+    await new Promise<void>((res) =>
+      fe.file((file) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => { results.push({ path: p, content: (ev.target?.result as string) || "" }); res(); };
+        reader.onerror = () => res();
+        reader.readAsText(file);
+      })
+    );
+  } else if (entry.isDirectory) {
+    const de = entry as FileSystemDirectoryEntry;
+    const reader = de.createReader();
+    await new Promise<void>((res) => {
+      reader.readEntries(async (entries) => {
+        for (const child of entries) await readEntryAsFiles(child, p, results);
+        res();
+      });
+    });
+  }
 }
 
 interface NameInputProps {
@@ -204,9 +243,10 @@ function NodeRow({
 
 export default function FileExplorer({
   tree, activeFileId, onOpenFile, onCreate,
-  onDelete, onRename, onToggle, onPushFolder, onPushAll, loading = false,
+  onDelete, onRename, onToggle, onPushFolder, onPushAll, onDropFiles, loading = false,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
 
   const handleConfirmCreate = (type: "file" | "folder", parentId: string | null, name: string) => {
     const node = onCreate(type, parentId, name);
@@ -215,12 +255,66 @@ export default function FileExplorer({
 
   const allFileCount = collectFiles(tree).length;
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggingOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingOver(false);
+    if (!onDropFiles) return;
+
+    const results: { path: string; content: string }[] = [];
+    const items = Array.from(e.dataTransfer.items);
+
+    for (const item of items) {
+      if (item.kind === "file") {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry) {
+          await readEntryAsFiles(entry, "", results);
+        } else {
+          const file = item.getAsFile();
+          if (file) {
+            await new Promise<void>((res) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => { results.push({ path: file.name, content: (ev.target?.result as string) || "" }); res(); };
+              reader.onerror = () => res();
+              reader.readAsText(file);
+            });
+          }
+        }
+      }
+    }
+
+    if (results.length > 0) onDropFiles(results);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c] relative" style={{ width: 220, minWidth: 220 }}>
+    <div
+      className={`flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c] relative transition-colors ${draggingOver ? "bg-[#1a2a3a] border-blue-500" : ""}`}
+      style={{ width: 220, minWidth: 220 }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {loading && (
         <div className="absolute inset-0 z-20 bg-[#252526]/80 flex flex-col items-center justify-center gap-2">
           <div className="h-5 w-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
           <span className="text-[11px] text-gray-400">Loading files…</span>
+        </div>
+      )}
+      {draggingOver && (
+        <div className="absolute inset-0 z-30 border-2 border-dashed border-blue-400 rounded pointer-events-none flex flex-col items-center justify-center gap-1 bg-[#1a2a3a]/60">
+          <Upload className="h-6 w-6 text-blue-400" />
+          <span className="text-[11px] text-blue-300 font-medium">Drop files to add</span>
         </div>
       )}
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0 border-b border-[#3c3c3c]">

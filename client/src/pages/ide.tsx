@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
   Terminal, User, X, Upload, Menu, Github, CloudDownload, SquareTerminal,
+  RefreshCw, Download,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -53,6 +54,8 @@ export default function IDE() {
 
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingShell, setSyncingShell] = useState(false);
+  const [lastBuild, setLastBuild] = useState<{ binary: string; name: string } | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [terminalTab, setTerminalTab] = useState<"output" | "shell">("output");
   const [stdinInput, setStdinInput] = useState("");
@@ -187,16 +190,56 @@ export default function IDE() {
     toast({ title: "Imported", description: `${files.length} file(s) added to Explorer` });
   }, [importFiles, toast]);
 
+  const isFlexBisonFile = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase();
+    return ext === "l" || ext === "y";
+  };
+
   const handleRun = async () => {
     if (!activeFile) {
       toast({ title: "No file open", description: "Open or create a file first.", variant: "destructive" });
       return;
     }
     setRunning(true);
+    setLastBuild(null);
     setTerminalOpen(true);
     setTerminalTab("output");
-
     const out = xtermOutputRef.current;
+
+    if (isFlexBisonFile(activeFile.name)) {
+      const allFiles = collectFiles(tree).map((f) => ({ path: f.path, content: f.content }));
+      const lexCount = allFiles.filter((f) => f.path.endsWith(".l")).length;
+      const bisonCount = allFiles.filter((f) => f.path.endsWith(".y")).length;
+      out?.writeCommand(`flex-bison pipeline — ${lexCount} .l, ${bisonCount} .y, ${allFiles.length} total files`);
+      if (stdinInput.trim()) out?.writeOutput(`[stdin] ${stdinInput}`);
+      out?.writeOutput("\x1b[90mRunning flex → bison → gcc...\x1b[0m");
+      try {
+        const res = await fetch("/api/run-flex-bison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: allFiles, stdin: stdinInput || undefined }),
+        });
+        const result = await res.json();
+        if (result.generated?.length) {
+          out?.writeOutput(`\x1b[90m[generated: ${result.generated.join(", ")}]\x1b[0m`);
+        }
+        if (result.stdout) out?.writeOutput(result.stdout);
+        if (result.stderr) out?.writeOutput(result.stderr, true);
+        const exitColor = result.ok ? "\x1b[32m" : "\x1b[31m";
+        out?.writeOutput(`${exitColor}[exited: code ${result.exit_code} · ${result.phase}]\x1b[0m`);
+        if (result.ok && result.binary) {
+          const binName = "a.out";
+          setLastBuild({ binary: result.binary, name: binName });
+          out?.writeOutput(`\x1b[32m[binary ready — use Download or Run in Shell below]\x1b[0m`);
+        }
+      } catch (err: any) {
+        out?.writeOutput(err.message || "Request failed", true);
+      } finally {
+        setRunning(false);
+      }
+      return;
+    }
+
     out?.writeCommand(`bmcc --lang ${language} --file "${activeFile.name}" --run`);
     if (stdinInput.trim()) out?.writeOutput(`[stdin] ${stdinInput}`);
     out?.writeOutput("\x1b[90mRunning...\x1b[0m");
@@ -220,6 +263,51 @@ export default function IDE() {
     } finally {
       setRunning(false);
     }
+  };
+
+  const handleSyncToShell = async () => {
+    setSyncingShell(true);
+    try {
+      const allFiles = collectFiles(tree).map((f) => ({ path: f.path, content: f.content }));
+      const res = await fetch("/api/shell/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: allFiles }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Sync failed");
+      setTerminalTab("shell");
+      setTimeout(() => {
+        xtermShellRef.current?.sendInput("ls\r");
+        xtermShellRef.current?.focus();
+      }, 120);
+      toast({ title: "Synced to Shell", description: `${data.count} file(s) written to ${data.path}` });
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncingShell(false);
+    }
+  };
+
+  const handleDownloadBinary = () => {
+    if (!lastBuild) return;
+    const bytes = Uint8Array.from(atob(lastBuild.binary), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = lastBuild.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRunInShell = () => {
+    setTerminalTab("shell");
+    setTerminalOpen(true);
+    setTimeout(() => {
+      xtermShellRef.current?.sendInput("./a.out\r");
+      xtermShellRef.current?.focus();
+    }, 120);
   };
 
   const loadRepoFiles = async (targetRepo?: GithubRepo) => {
@@ -514,6 +602,7 @@ export default function IDE() {
             onToggle={toggleFolder}
             onPushFolder={handlePushFolder}
             onPushAll={handlePushAll}
+            onDropFiles={handleImportFiles}
             loading={loadingRepoFiles}
           />
         </div>
@@ -628,6 +717,18 @@ export default function IDE() {
 
               <div className="flex-1" />
 
+              {terminalOpen && (
+                <button
+                  onClick={handleSyncToShell}
+                  disabled={syncingShell}
+                  title="Write all IDE files to Shell workspace (/tmp/bm_workspace)"
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] text-gray-500 hover:text-emerald-400 disabled:opacity-50 mr-1"
+                >
+                  {syncingShell ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  <span className="hidden sm:inline">Sync to Shell</span>
+                </button>
+              )}
+
               {terminalOpen && terminalTab === "output" && (
                 <Button
                   onClick={handleRun}
@@ -651,6 +752,28 @@ export default function IDE() {
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <XTermTerminal ref={xtermOutputRef} noShell className="h-full" />
                   </div>
+
+                  {lastBuild && (
+                    <div className="flex-shrink-0 border-t border-[#2d2d2d] bg-[#0f1f12] px-3 py-1.5 flex items-center gap-2">
+                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">binary</span>
+                      <span className="text-[10px] text-gray-600 flex-1">{lastBuild.name} — compiled successfully</span>
+                      <button
+                        onClick={handleDownloadBinary}
+                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-[#1a3a1a] border border-emerald-800 text-emerald-400 rounded hover:bg-[#224422] transition-colors"
+                      >
+                        <Download className="h-3 w-3" />
+                        Download
+                      </button>
+                      <button
+                        onClick={handleRunInShell}
+                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-[#1a2a3a] border border-blue-800 text-blue-400 rounded hover:bg-[#1e3a4a] transition-colors"
+                      >
+                        <Play className="h-3 w-3" />
+                        Run in Shell
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex-shrink-0 border-t border-[#2d2d2d] bg-[#141414]">
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e1e]">
                       <span className="text-[10px] text-[#569cd6] font-mono font-semibold tracking-wide">stdin</span>

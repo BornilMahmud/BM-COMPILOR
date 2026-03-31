@@ -1,14 +1,18 @@
 import { WebSocketServer } from "ws";
 import type { Server } from "http";
 import * as pty from "node-pty";
+import { mkdirSync } from "fs";
 import { log } from "./index";
+import { SHELL_WORKSPACE } from "./routes";
+
+try { mkdirSync(SHELL_WORKSPACE, { recursive: true }); } catch {}
 
 export function setupTerminalWS(httpServer: Server) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws/terminal" });
 
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
-    const cwd = process.env.HOME || "/tmp";
+    const cwd = SHELL_WORKSPACE;
 
     let ptyProcess: ReturnType<typeof pty.spawn> | null = null;
     try {
@@ -21,6 +25,7 @@ export function setupTerminalWS(httpServer: Server) {
           ...process.env,
           TERM: "xterm-256color",
           COLORTERM: "truecolor",
+          PS1: "\\[\\033[1;32m\\]bm-workspace\\[\\033[0m\\]:\\[\\033[1;34m\\]\\W\\[\\033[0m\\]$ ",
         } as Record<string, string>,
       });
     } catch (err) {

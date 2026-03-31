@@ -491,6 +491,11 @@ export default function IDE() {
             </SelectContent>
           </Select>
 
+          {activeFile && isFlexBisonFile(activeFile.name) && (
+            <span className="hidden sm:inline text-[10px] text-amber-400 font-mono bg-amber-900/30 border border-amber-700/40 px-1.5 py-0.5 rounded flex-shrink-0">
+              Flex/Bison
+            </span>
+          )}
           <Button
             onClick={handleRun}
             disabled={running || !activeFile}
@@ -743,8 +748,11 @@ export default function IDE() {
             </div>
           </div>
 
-          {terminalOpen && (
-            <div className="h-64 sm:h-72 md:h-80 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden">
+          {/* Terminal panel — always in DOM so shell PTY is never killed */}
+          <div
+            className="h-64 sm:h-72 md:h-80 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden"
+            style={{ display: terminalOpen ? "flex" : "none" }}
+          >
 
               {/* Output tab — conditionally rendered, flex-col with stdin at bottom */}
               {terminalTab === "output" && (
@@ -804,11 +812,9 @@ export default function IDE() {
                 />
               </div>
 
-            </div>
-          )}
+          </div>
         </div>
       </div>
-
       {importModalOpen && (
         <GitHubImportModal
           githubToken={githubToken}

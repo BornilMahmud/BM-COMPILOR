@@ -19,7 +19,7 @@ export const defaultCode: Record<TargetLanguage, string> = {
 };
 
 const extMap: Record<string, TargetLanguage> = {
-  c: "c",
+  c: "c", l: "c", y: "c", h: "c", hpp: "cpp",
   cpp: "cpp", cxx: "cpp", cc: "cpp",
   java: "java",
   py: "py",

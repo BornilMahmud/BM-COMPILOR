@@ -208,10 +208,13 @@ export default function IDE() {
     const out = xtermOutputRef.current;
 
     if (isFlexBisonFile(activeFile.name)) {
-      const allFiles = collectFiles(tree).map((f) => ({ path: f.path, content: f.content }));
+      const COMPILE_EXTS = new Set(["l","y","c","h","cpp","cc","cxx","hpp","hh"]);
+      const allFiles = collectFiles(tree)
+        .filter((f) => COMPILE_EXTS.has(f.path.split(".").pop()?.toLowerCase() ?? ""))
+        .map((f) => ({ path: f.path, content: f.content }));
       const lexCount = allFiles.filter((f) => f.path.endsWith(".l")).length;
       const bisonCount = allFiles.filter((f) => f.path.endsWith(".y")).length;
-      out?.writeCommand(`flex-bison pipeline — ${lexCount} .l, ${bisonCount} .y, ${allFiles.length} total files`);
+      out?.writeCommand(`flex-bison pipeline — ${lexCount} .l, ${bisonCount} .y, ${allFiles.length} source files`);
       const stdinStr = stdinLines.join("\n");
       if (stdinStr.trim()) out?.writeOutput(`[stdin] ${stdinStr}`);
       out?.writeOutput("\x1b[90mRunning flex → bison → gcc...\x1b[0m");
@@ -271,7 +274,10 @@ export default function IDE() {
   const handleSyncToShell = async () => {
     setSyncingShell(true);
     try {
-      const allFiles = collectFiles(tree).map((f) => ({ path: f.path, content: f.content }));
+      const SHELL_EXTS = new Set(["l","y","c","h","cpp","cc","cxx","hpp","hh","sh","bash","txt","py","rb","go","rs"]);
+      const allFiles = collectFiles(tree)
+        .filter((f) => SHELL_EXTS.has(f.path.split(".").pop()?.toLowerCase() ?? ""))
+        .map((f) => ({ path: f.path, content: f.content }));
       const res = await fetch("/api/shell/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

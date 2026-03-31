@@ -24,6 +24,7 @@ interface Props {
 }
 
 const RECENT_KEY = "bm_recent_imports";
+const IMPORT_BATCH = 300;
 const SUPPORTED_EXTS = new Set(["c","cpp","cc","cxx","h","hpp","java","py","js","mjs","ts","jsx","tsx","php","rb","go","rs","dart","sql","mysql","ora","sh","bash","txt","json","yaml","yml","toml","md","html","css","scss","xml","l","y"]);
 
 function parseGitHubUrl(raw: string): { owner: string; repo: string; branch?: string; subPath?: string } | null {
@@ -75,6 +76,7 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [fetching, setFetching] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ batch: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
   const [onlySupported, setOnlySupported] = useState(true);
@@ -149,26 +151,42 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
   const handleImport = async () => {
     if (!parsed || selected.size === 0) return;
     setImporting(true);
+    setImportProgress(null);
     setError("");
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (githubToken) headers["X-GitHub-Token"] = githubToken;
-      const res = await fetch("/api/github/import-files", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          owner: parsed.owner, repo: parsed.repo, branch: parsed.branch,
-          subPath: parsed.subPath, paths: Array.from(selected),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) { setError(data.error || "Import failed"); return; }
-      onImport(data.files as { path: string; content: string }[]);
+
+      const allPaths = Array.from(selected);
+      const chunks: string[][] = [];
+      for (let i = 0; i < allPaths.length; i += IMPORT_BATCH) {
+        chunks.push(allPaths.slice(i, i + IMPORT_BATCH));
+      }
+
+      const allFiles: { path: string; content: string }[] = [];
+
+      for (let ci = 0; ci < chunks.length; ci++) {
+        setImportProgress({ batch: ci + 1, total: chunks.length });
+        const res = await fetch("/api/github/import-files", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            owner: parsed.owner, repo: parsed.repo, branch: parsed.branch,
+            subPath: parsed.subPath, paths: chunks[ci],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) { setError(data.error || "Import failed"); return; }
+        allFiles.push(...(data.files as { path: string; content: string }[]));
+      }
+
+      onImport(allFiles);
       onClose();
     } catch (err: any) {
       setError(err.message || "Import failed");
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -310,7 +328,11 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
           <div className="px-4 py-3 bg-[#252526] border-t border-[#3c3c3c] flex items-center justify-between flex-shrink-0 gap-3">
             <span className="text-xs text-gray-400">
               {selected.size} file{selected.size !== 1 ? "s" : ""} selected
-              {selected.size > 300 && <span className="text-yellow-500 ml-1">(max 300 at once)</span>}
+              {selected.size > IMPORT_BATCH && (
+                <span className="text-blue-400 ml-1">
+                  ({Math.ceil(selected.size / IMPORT_BATCH)} batches)
+                </span>
+              )}
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 h-8 text-xs">Cancel</Button>
@@ -321,8 +343,12 @@ export default function GitHubImportModal({ githubToken, onImport, onClose }: Pr
                 className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs"
               >
                 {importing
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Importing...</>
-                  : <><Download className="h-3.5 w-3.5 mr-1" />Import {Math.min(selected.size, 300)} files</>}
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                      {importProgress && importProgress.total > 1
+                        ? `Batch ${importProgress.batch}/${importProgress.total}…`
+                        : "Importing…"}
+                    </>
+                  : <><Download className="h-3.5 w-3.5 mr-1" />Import {selected.size} file{selected.size !== 1 ? "s" : ""}</>}
               </Button>
             </div>
           </div>

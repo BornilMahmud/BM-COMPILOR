@@ -162,9 +162,10 @@ async function runDirect(
   /* SQL / MySQL / OracleSQL */
   if (lang === "sql" || lang === "mysql" || lang === "ora") {
     const { readFileSync } = await import("fs");
-    const sql = readFileSync(filePath, "utf8");
+    const userSql = readFileSync(filePath, "utf8");
     const cmd = IS_WIN ? "sqlite3.exe" : "sqlite3";
-    return { ...(await spawnDirect(cmd, [":memory:"], sql)), phase: "run" };
+    const formatted = `.headers on\n.mode box\n${userSql}`;
+    return { ...(await spawnDirect(cmd, [":memory:"], formatted)), phase: "run" };
   }
 
   /* Bash */

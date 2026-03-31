@@ -31,6 +31,8 @@ const extMap: Record<string, TargetLanguage> = {
   rs: "rs",
   dart: "dart",
   sql: "sql",
+  mysql: "mysql",
+  ora: "ora",
   sh: "sh", bash: "sh",
 };
 

@@ -234,7 +234,7 @@ export default function IDE() {
       const treeRes = await fetch(`/api/github/repo-tree?owner=${owner}&repo=${repoName}`, { headers });
       if (!treeRes.ok) throw new Error("Failed to load repo tree");
       const treeData = await treeRes.json();
-      const supportedExts = new Set(["c","cpp","cc","java","py","js","ts","jsx","tsx","php","rb","go","rs","dart","sql","sh","bash","md","txt","json"]);
+      const supportedExts = new Set(["c","cpp","cc","java","py","js","ts","jsx","tsx","php","rb","go","rs","dart","sql","mysql","ora","sh","bash","md","txt","json"]);
       const codePaths: string[] = (treeData.files as { path: string; size: number }[])
         .filter((f) => supportedExts.has(f.path.split(".").pop()?.toLowerCase() ?? "") && f.size < 100000)
         .slice(0, 40)

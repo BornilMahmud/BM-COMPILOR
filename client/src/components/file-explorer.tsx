@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   ChevronRight, ChevronDown, FilePlus, FolderPlus,
-  Trash2, Pencil, FileCode, Folder, FolderOpen, Upload,
+  Trash2, Pencil, FileCode, Folder, FolderOpen, Upload, RotateCcw,
 } from "lucide-react";
 import type { FileNode } from "@/hooks/use-file-tree";
 import { collectFiles, getNodePath } from "@/hooks/use-file-tree";
@@ -16,6 +16,7 @@ interface Props {
   onToggle: (id: string) => void;
   onPushFolder: (nodes: FileNode[], folderPath: string) => void;
   onPushAll: () => void;
+  onClearAll: () => void;
   onDropFiles?: (files: { path: string; content: string }[]) => void;
   loading?: boolean;
 }
@@ -243,10 +244,11 @@ function NodeRow({
 
 export default function FileExplorer({
   tree, activeFileId, onOpenFile, onCreate,
-  onDelete, onRename, onToggle, onPushFolder, onPushAll, onDropFiles, loading = false,
+  onDelete, onRename, onToggle, onPushFolder, onPushAll, onClearAll, onDropFiles, loading = false,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const handleConfirmCreate = (type: "file" | "folder", parentId: string | null, name: string) => {
     const node = onCreate(type, parentId, name);
@@ -335,8 +337,30 @@ export default function FileExplorer({
             onClick={onPushAll}
             className="p-0.5 rounded hover:bg-[#3c3c3c] text-gray-400 hover:text-blue-400"
           ><Upload className="h-3.5 w-3.5" /></button>
+          <button
+            title="Clear all files"
+            onClick={() => setConfirmClear(true)}
+            className="p-0.5 rounded hover:bg-[#3c3c3c] text-gray-400 hover:text-red-400"
+          ><RotateCcw className="h-3.5 w-3.5" /></button>
         </div>
       </div>
+
+      {confirmClear && (
+        <div className="flex flex-col gap-1 px-3 py-2 bg-[#1e1e1e] border-b border-red-900/60 flex-shrink-0">
+          <p className="text-[10px] text-red-400 font-medium">Clear all files?</p>
+          <p className="text-[10px] text-gray-500 leading-4">Resets explorer to a blank main.c — this cannot be undone.</p>
+          <div className="flex gap-1 mt-0.5">
+            <button
+              onClick={() => { onClearAll(); setConfirmClear(false); }}
+              className="flex-1 py-0.5 text-[10px] bg-red-900/40 border border-red-700/60 text-red-300 rounded hover:bg-red-900/70 transition-colors"
+            >Clear All</button>
+            <button
+              onClick={() => setConfirmClear(false)}
+              className="flex-1 py-0.5 text-[10px] bg-[#2a2a2a] border border-[#444] text-gray-400 rounded hover:bg-[#333] transition-colors"
+            >Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto py-1">
         {editing &&

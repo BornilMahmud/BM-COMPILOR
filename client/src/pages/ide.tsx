@@ -42,7 +42,7 @@ export default function IDE() {
   const xtermOutputRef = useRef<XTermHandle>(null);
   const xtermShellRef = useRef<XTermHandle>(null);
 
-  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles } = useFileTree();
+  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll } = useFileTree();
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
     const saved = localStorage.getItem("bm_open_tabs");
@@ -298,6 +298,54 @@ export default function IDE() {
     }
   };
 
+  const handleShellGitPush = async () => {
+    if (!repo) {
+      toast({ title: "No repo selected", description: "Open a GitHub repository first before pushing.", variant: "destructive" });
+      return;
+    }
+    if (!githubToken) {
+      toast({ title: "No GitHub token", description: "Login with GitHub to push.", variant: "destructive" });
+      return;
+    }
+    setSyncingShell(true);
+    try {
+      const SHELL_EXTS = new Set(["l","y","c","h","cpp","cc","cxx","hpp","hh","sh","bash","txt","py","rb","go","rs"]);
+      const allFiles = collectFiles(tree)
+        .filter((f) => SHELL_EXTS.has(f.path.split(".").pop()?.toLowerCase() ?? ""))
+        .map((f) => ({ path: f.path, content: f.content }));
+      const res = await fetch("/api/shell/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: allFiles }),
+      });
+      if (!res.ok) throw new Error("File sync failed");
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+      setSyncingShell(false);
+      return;
+    } finally {
+      setSyncingShell(false);
+    }
+    const [owner, repoName] = repo.full_name.split("/");
+    const remoteUrl = `https://${githubToken}@github.com/${owner}/${repoName}.git`;
+    const cmds = [
+      `cd /tmp/bm_workspace`,
+      `git init -q`,
+      `git config user.email "bm@compiler.dev"`,
+      `git config user.name "BM Compiler"`,
+      `git add -A`,
+      `git commit -q -m "BM Compiler export $(date +%Y-%m-%d)"`,
+      `git remote remove origin 2>/dev/null; git remote add origin '${remoteUrl}'`,
+      `git push -f origin HEAD:main && echo "✓ Pushed to ${repo.full_name}" || echo "✗ Push failed"`,
+    ].join(" && ");
+    setTerminalTab("shell");
+    setTerminalOpen(true);
+    setTimeout(() => {
+      xtermShellRef.current?.sendInput(cmds + "\r");
+      xtermShellRef.current?.focus();
+    }, 150);
+  };
+
   const handleDownloadBinary = () => {
     if (!lastBuild) return;
     const bytes = Uint8Array.from(atob(lastBuild.binary), (c) => c.charCodeAt(0));
@@ -425,6 +473,18 @@ export default function IDE() {
   const handlePushAll = () => {
     const files = collectFiles(tree);
     handlePushFiles(files.map((f) => ({ path: f.path, content: f.content })), `${files.length} file(s)`);
+  };
+
+  const handleClearAll = () => {
+    const blank = clearAll();
+    setOpenTabs([blank.id]);
+    setActiveTabId(blank.id);
+    localStorage.setItem("bm_open_tabs", JSON.stringify([blank.id]));
+    localStorage.setItem("bm_active_tab", blank.id);
+    localStorage.removeItem("bm_selected_repo");
+    localStorage.removeItem("bm_loaded_repo");
+    setRepo(null);
+    toast({ title: "Explorer cleared", description: "Reset to a blank main.c." });
   };
 
   const handlePushFolder = (nodes: FileNode[], folderPath: string) => {
@@ -616,6 +676,7 @@ export default function IDE() {
             onToggle={toggleFolder}
             onPushFolder={handlePushFolder}
             onPushAll={handlePushAll}
+            onClearAll={handleClearAll}
             onDropFiles={handleImportFiles}
             loading={loadingRepoFiles}
           />
@@ -740,6 +801,18 @@ export default function IDE() {
                 >
                   {syncingShell ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   <span className="hidden sm:inline">Sync to Shell</span>
+                </button>
+              )}
+
+              {terminalOpen && !isGuest && repo && (
+                <button
+                  onClick={handleShellGitPush}
+                  disabled={syncingShell}
+                  title={`Push source files to ${repo.full_name} via Shell git`}
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] text-gray-500 hover:text-blue-400 disabled:opacity-50 mr-1"
+                >
+                  <Github className="h-3 w-3" />
+                  <span className="hidden sm:inline">Push to GitHub</span>
                 </button>
               )}
 

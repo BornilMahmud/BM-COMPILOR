@@ -234,5 +234,11 @@ export function useFileTree() {
     [persist]
   );
 
-  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles };
+  const clearAll = useCallback(() => {
+    const blank = makeFile("main.c", defaultCode("c"));
+    persist([blank]);
+    return blank;
+  }, [persist]);
+
+  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll };
 }

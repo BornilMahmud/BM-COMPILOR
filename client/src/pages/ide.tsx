@@ -320,6 +320,23 @@ export default function IDE() {
       return;
     }
     setSyncingShell(true);
+    const [owner, repoName] = repo.full_name.split("/");
+    const remoteUrl = `https://${githubToken}@github.com/${owner}/${repoName}.git`;
+    const scriptLines = [
+      `#!/bin/bash`,
+      `set -e`,
+      `cd /tmp/bm_workspace`,
+      `git init -q`,
+      `git config user.email "bm@compiler.dev"`,
+      `git config user.name "BM Compiler"`,
+      `git add -A`,
+      `git commit -q -m "BM Compiler export $(date +%Y-%m-%d)" 2>/dev/null || git commit --allow-empty -q -m "BM Compiler export $(date +%Y-%m-%d)"`,
+      `git remote remove origin 2>/dev/null || true`,
+      `git remote add origin '${remoteUrl}'`,
+      `git push -f origin HEAD:main`,
+      `echo ""`,
+      `echo "Pushed to ${repo.full_name} successfully."`,
+    ].join("\n");
     try {
       const SHELL_EXTS = new Set(["l","y","c","h","cpp","cc","cxx","hpp","hh","sh","bash","txt","py","rb","go","rs"]);
       const allFiles = collectFiles(tree)
@@ -328,7 +345,7 @@ export default function IDE() {
       const res = await fetch("/api/shell/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: allFiles }),
+        body: JSON.stringify({ files: [...allFiles, { path: "_bm_push.sh", content: scriptLines }] }),
       });
       if (!res.ok) throw new Error("File sync failed");
     } catch (err: any) {
@@ -338,23 +355,11 @@ export default function IDE() {
     } finally {
       setSyncingShell(false);
     }
-    const [owner, repoName] = repo.full_name.split("/");
-    const remoteUrl = `https://${githubToken}@github.com/${owner}/${repoName}.git`;
-    const cmds = [
-      `cd /tmp/bm_workspace`,
-      `git init -q`,
-      `git config user.email "bm@compiler.dev"`,
-      `git config user.name "BM Compiler"`,
-      `git add -A`,
-      `git commit -q -m "BM Compiler export $(date +%Y-%m-%d)"`,
-      `git remote remove origin 2>/dev/null; git remote add origin '${remoteUrl}'`,
-      `git push -f origin HEAD:main && echo "✓ Pushed to ${repo.full_name}" || echo "✗ Push failed"`,
-    ].join(" && ");
     const shellId = shellSessions[0]?.id ?? "shell-1";
     setTerminalTab(shellId);
     setTerminalOpen(true);
     setTimeout(() => {
-      shellHandlesMap.current.get(shellId)?.sendInput(cmds + "\r");
+      shellHandlesMap.current.get(shellId)?.sendInput("bash /tmp/bm_workspace/_bm_push.sh\r");
       shellHandlesMap.current.get(shellId)?.focus();
     }, 150);
   };

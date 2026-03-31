@@ -58,7 +58,8 @@ export default function IDE() {
   const [lastBuild, setLastBuild] = useState<{ binary: string; name: string } | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [terminalTab, setTerminalTab] = useState<"output" | "shell">("output");
-  const [stdinInput, setStdinInput] = useState("");
+  const [stdinLines, setStdinLines] = useState<string[]>([]);
+  const [stdinDraft, setStdinDraft] = useState("");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -211,13 +212,14 @@ export default function IDE() {
       const lexCount = allFiles.filter((f) => f.path.endsWith(".l")).length;
       const bisonCount = allFiles.filter((f) => f.path.endsWith(".y")).length;
       out?.writeCommand(`flex-bison pipeline — ${lexCount} .l, ${bisonCount} .y, ${allFiles.length} total files`);
-      if (stdinInput.trim()) out?.writeOutput(`[stdin] ${stdinInput}`);
+      const stdinStr = stdinLines.join("\n");
+      if (stdinStr.trim()) out?.writeOutput(`[stdin] ${stdinStr}`);
       out?.writeOutput("\x1b[90mRunning flex → bison → gcc...\x1b[0m");
       try {
         const res = await fetch("/api/run-flex-bison", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ files: allFiles, stdin: stdinInput || undefined }),
+          body: JSON.stringify({ files: allFiles, stdin: stdinStr || undefined }),
         });
         const result = await res.json();
         if (result.generated?.length) {
@@ -230,7 +232,7 @@ export default function IDE() {
         if (result.ok && result.binary) {
           const binName = "a.out";
           setLastBuild({ binary: result.binary, name: binName });
-          out?.writeOutput(`\x1b[32m[binary ready — use Download or Run in Shell below]\x1b[0m`);
+          out?.writeOutput(`\x1b[32m[binary ready — switch to Shell tab, then type: ./a.out]\x1b[0m`);
         }
       } catch (err: any) {
         out?.writeOutput(err.message || "Request failed", true);
@@ -240,8 +242,9 @@ export default function IDE() {
       return;
     }
 
+    const stdinStr = stdinLines.join("\n");
     out?.writeCommand(`bmcc --lang ${language} --file "${activeFile.name}" --run`);
-    if (stdinInput.trim()) out?.writeOutput(`[stdin] ${stdinInput}`);
+    if (stdinStr.trim()) out?.writeOutput(`[stdin] ${stdinStr}`);
     out?.writeOutput("\x1b[90mRunning...\x1b[0m");
 
     try {
@@ -251,7 +254,7 @@ export default function IDE() {
           "Content-Type": "application/json",
           ...(githubToken ? { "X-GitHub-Token": githubToken } : {}),
         },
-        body: JSON.stringify({ language, filename: activeFile.name, code: activeFile.content, stdin: stdinInput || undefined }),
+        body: JSON.stringify({ language, filename: activeFile.name, code: activeFile.content, stdin: stdinStr || undefined }),
       });
       const result: RunResult = await res.json();
       if (result.stdout) out?.writeOutput(result.stdout);
@@ -434,7 +437,7 @@ export default function IDE() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); }
     if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); if (!isGuest) handleSaveFile(); }
-  }, [activeFile, language, githubToken, repo, stdinInput, isGuest]);
+  }, [activeFile, language, githubToken, repo, stdinLines, isGuest]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -785,17 +788,42 @@ export default function IDE() {
                   <div className="flex-shrink-0 border-t border-[#2d2d2d] bg-[#141414]">
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e1e]">
                       <span className="text-[10px] text-[#569cd6] font-mono font-semibold tracking-wide">stdin</span>
-                      <span className="text-[10px] text-gray-600">— program input (one value per line, Ctrl+Enter to run)</span>
+                      <span className="text-[10px] text-gray-600">— type a value and press Enter to add</span>
+                      {stdinLines.length > 0 && (
+                        <button
+                          onClick={() => setStdinLines([])}
+                          className="ml-auto text-[10px] text-gray-500 hover:text-red-400 font-mono transition-colors"
+                        >clear all</button>
+                      )}
                     </div>
-                    <textarea
-                      value={stdinInput}
-                      onChange={(e) => setStdinInput(e.target.value)}
-                      onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); } }}
-                      placeholder={"5\nhello world\n3.14"}
-                      rows={3}
-                      spellCheck={false}
-                      className="w-full bg-transparent text-white text-xs font-mono placeholder:text-[#2e2e2e] px-3 py-2 resize-none focus:outline-none leading-relaxed"
-                    />
+                    {stdinLines.length > 0 && (
+                      <div className="flex flex-wrap gap-1 px-3 py-1.5 border-b border-[#1e1e1e] max-h-16 overflow-y-auto">
+                        {stdinLines.map((line, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 bg-[#1e3a1e] text-[#4ec94e] text-[10px] font-mono px-1.5 py-0.5 rounded">
+                            {line === "" ? <span className="italic text-gray-500">↵</span> : line}
+                            <button onClick={() => setStdinLines((prev) => prev.filter((_, j) => j !== i))} className="text-gray-500 hover:text-red-400 leading-none">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 px-3 py-1.5">
+                      <span className="text-[10px] text-gray-600 font-mono select-none">{stdinLines.length + 1}&gt;</span>
+                      <input
+                        type="text"
+                        value={stdinDraft}
+                        onChange={(e) => setStdinDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            setStdinLines((prev) => [...prev, stdinDraft]);
+                            setStdinDraft("");
+                          }
+                        }}
+                        placeholder="type input value, press Enter to add…"
+                        spellCheck={false}
+                        className="flex-1 bg-transparent text-white text-xs font-mono placeholder:text-[#2e2e2e] focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

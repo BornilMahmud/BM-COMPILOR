@@ -50,7 +50,7 @@ export default function Login() {
           <CardDescription className="text-gray-300 text-base">
             Online compiler and code runner with GitHub integration.
             <br />
-            Built with C + Flex + Bison.
+            Built with Flex + Bison.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">

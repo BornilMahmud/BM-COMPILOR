@@ -524,8 +524,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           })
         );
 
-        const lexFiles = files.filter((f) => f.path.endsWith(".l"));
-        const bisonFiles = files.filter((f) => f.path.endsWith(".y"));
+        const lexFiles = files.filter((f) => f.path.endsWith(".l")).slice(0, 1);
+        const bisonFiles = files.filter((f) => f.path.endsWith(".y")).slice(0, 1);
         const generatedC: string[] = [];
         let stepOutput = "";
 

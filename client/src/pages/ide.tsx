@@ -219,8 +219,17 @@ export default function IDE() {
 
     if (isFlexBisonFile(activeFile.name)) {
       const COMPILE_EXTS = new Set(["l","y","c","h","cpp","cc","cxx","hpp","hh"]);
+      const activeBaseName = activeFile.name.replace(/\.(l|y)$/i, "");
       const allFiles = collectFiles(tree)
-        .filter((f) => COMPILE_EXTS.has(f.path.split(".").pop()?.toLowerCase() ?? ""))
+        .filter((f) => {
+          const ext = (f.path.split(".").pop() ?? "").toLowerCase();
+          if (!COMPILE_EXTS.has(ext)) return false;
+          if (ext === "l" || ext === "y") {
+            const fname = (f.path.split("/").pop() ?? "").replace(/\.(l|y)$/i, "");
+            return fname === activeBaseName;
+          }
+          return true;
+        })
         .map((f) => ({ path: f.path, content: f.content }));
       const lexCount = allFiles.filter((f) => f.path.endsWith(".l")).length;
       const bisonCount = allFiles.filter((f) => f.path.endsWith(".y")).length;

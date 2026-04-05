@@ -16,6 +16,8 @@ export const defaultCode: Record<TargetLanguage, string> = {
   mysql: `-- BM Compiler — MySQL-compatible SQL (SQLite engine)\nCREATE TABLE products (\n  id    INTEGER PRIMARY KEY AUTOINCREMENT,\n  name  TEXT NOT NULL,\n  price REAL\n);\n\nINSERT INTO products (name, price) VALUES ('Apple', 1.20);\nINSERT INTO products (name, price) VALUES ('Banana', 0.50);\nINSERT INTO products (name, price) VALUES ('Cherry', 3.00);\n\nSELECT * FROM products;\nSELECT name, price FROM products WHERE price > 1.00 ORDER BY price DESC;\n`,
   ora: `-- BM Compiler — OracleSQL-compatible (SQLite engine)\nCREATE TABLE employees (\n  emp_id   INTEGER PRIMARY KEY,\n  emp_name TEXT NOT NULL,\n  salary   REAL,\n  dept     TEXT\n);\n\nINSERT INTO employees VALUES (1, 'Alice',  75000, 'Engineering');\nINSERT INTO employees VALUES (2, 'Bob',    60000, 'Marketing');\nINSERT INTO employees VALUES (3, 'Carol',  85000, 'Engineering');\n\nSELECT emp_name, salary FROM employees WHERE dept = 'Engineering' ORDER BY salary DESC;\nSELECT dept, AVG(salary) AS avg_salary FROM employees GROUP BY dept;\n`,
   sh: `#!/bin/bash\n\necho "Hello, World!"\n\nfor i in 1 2 3 4 5; do\n  echo "Number: $i"\ndone\n\nSUM=$((3 + 7))\necho "3 + 7 = $SUM"\n`,
+  html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>My Page</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <h1>Hello, World!</h1>\n  <p>Welcome to BM Compiler — HTML preview.</p>\n  <button onclick="greet()">Click Me</button>\n  <script src="main.js"></script>\n</body>\n</html>\n`,
+  css: `/* style.css */\nbody {\n  font-family: Arial, sans-serif;\n  background: #f0f4f8;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  min-height: 100vh;\n  margin: 0;\n}\n\nh1 {\n  color: #2563eb;\n  font-size: 2.5rem;\n  margin-bottom: 0.5rem;\n}\n\np {\n  color: #555;\n  font-size: 1.1rem;\n}\n\nbutton {\n  margin-top: 1rem;\n  padding: 0.6rem 1.5rem;\n  background: #2563eb;\n  color: white;\n  border: none;\n  border-radius: 8px;\n  font-size: 1rem;\n  cursor: pointer;\n  transition: background 0.2s;\n}\n\nbutton:hover {\n  background: #1d4ed8;\n}\n`,
 };
 
 const extMap: Record<string, TargetLanguage> = {
@@ -34,6 +36,8 @@ const extMap: Record<string, TargetLanguage> = {
   mysql: "mysql",
   ora: "ora",
   sh: "sh", bash: "sh",
+  html: "html", htm: "html",
+  css: "css",
 };
 
 export function langFromFilename(name: string): TargetLanguage {

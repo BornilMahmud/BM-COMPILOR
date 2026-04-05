@@ -4,6 +4,7 @@ export const targetLanguages = [
   'c', 'cpp', 'java', 'py',
   'js', 'ts', 'php', 'rb', 'go', 'rs', 'dart',
   'sql', 'mysql', 'ora', 'sh',
+  'html', 'css',
 ] as const;
 
 export type TargetLanguage = typeof targetLanguages[number];
@@ -62,6 +63,8 @@ export const targetLabels: Record<TargetLanguage, string> = {
   mysql: 'MySQL',
   ora:   'OracleSQL',
   sh:    'Bash',
+  html:  'HTML',
+  css:   'CSS',
 };
 
 export const targetFileExtensions: Record<TargetLanguage, string> = {
@@ -80,6 +83,8 @@ export const targetFileExtensions: Record<TargetLanguage, string> = {
   mysql: '.sql',
   ora:   '.sql',
   sh:    '.sh',
+  html:  '.html',
+  css:   '.css',
 };
 
 export const defaultFilenames: Record<TargetLanguage, string> = {
@@ -98,13 +103,15 @@ export const defaultFilenames: Record<TargetLanguage, string> = {
   mysql: 'query.sql',
   ora:   'query.sql',
   sh:    'script.sh',
+  html:  'index.html',
+  css:   'style.css',
 };
 
 export const languageGroups: { label: string; langs: TargetLanguage[] }[] = [
   { label: 'Systems',      langs: ['c', 'cpp', 'rs'] },
   { label: 'JVM',          langs: ['java'] },
   { label: 'Scripting',    langs: ['py', 'rb', 'php', 'sh'] },
-  { label: 'Web',          langs: ['js', 'ts'] },
+  { label: 'Web',          langs: ['js', 'ts', 'html', 'css'] },
   { label: 'Mobile/Other', langs: ['dart', 'go'] },
   { label: 'Database',     langs: ['sql', 'mysql', 'ora'] },
 ];

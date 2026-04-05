@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Play, Save, FolderGit2, LogOut, ChevronDown, ChevronUp,
   Terminal, User, X, Upload, Menu, Github, CloudDownload, SquareTerminal,
-  RefreshCw, Download, Plus, RotateCcw,
+  RefreshCw, Download, Plus, RotateCcw, Globe, MonitorPlay, ExternalLink,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -15,6 +15,8 @@ import { javascript } from "@codemirror/lang-javascript";
 import { cpp } from "@codemirror/lang-cpp";
 import { java } from "@codemirror/lang-java";
 import { python } from "@codemirror/lang-python";
+import { html as cmHtml } from "@codemirror/lang-html";
+import { css as cmCss } from "@codemirror/lang-css";
 import type { TargetLanguage, GithubRepo, RunResult } from "@shared/schema";
 import { targetLabels, languageGroups } from "@shared/schema";
 import { useFileTree, findNodeById, collectFiles, getNodePath } from "@/hooks/use-file-tree";
@@ -29,9 +31,38 @@ function getEditorLang(target: TargetLanguage) {
     case "c": case "cpp": return cpp();
     case "java": return java();
     case "py": return python();
+    case "html": return cmHtml();
+    case "css": return cmCss();
     case "js": case "ts": case "sql": case "mysql": case "ora": case "sh": return javascript();
     default: return javascript();
   }
+}
+
+function buildPreviewHtml(htmlContent: string, allFiles: { name: string; path: string; content: string }[]): string {
+  let doc = htmlContent;
+
+  doc = doc.replace(
+    /<link\b([^>]*)>/gi,
+    (match, attrs) => {
+      const relMatch = attrs.match(/rel=["']stylesheet["']/i);
+      const hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
+      if (!relMatch || !hrefMatch) return match;
+      const fname = hrefMatch[1].split("/").pop() ?? "";
+      const found = allFiles.find((f) => f.name === fname || f.path.endsWith(fname));
+      return found ? `<style>/* ${fname} */\n${found.content}\n</style>` : match;
+    }
+  );
+
+  doc = doc.replace(
+    /<script\b([^>]*)src=["']([^"']+)["']([^>]*)><\/script>/gi,
+    (_match, _pre, src, _post) => {
+      const fname = src.split("/").pop() ?? "";
+      const found = allFiles.find((f) => f.name === fname || f.path.endsWith(fname));
+      return found ? `<script>/* ${fname} */\n${found.content}\n</script>` : _match;
+    }
+  );
+
+  return doc;
 }
 
 interface ShellSession {
@@ -75,6 +106,7 @@ export default function IDE() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [loadingRepoFiles, setLoadingRepoFiles] = useState(false);
   const [needsAutoLoad, setNeedsAutoLoad] = useState(false);
+  const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
 
   const isGuest = !user;
 
@@ -137,6 +169,20 @@ export default function IDE() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (terminalTab !== "preview" || !livePreviewHtml) return;
+    const allFiles = collectFiles(tree).map((f) => ({ name: f.name, path: f.path, content: f.content }));
+    const htmlFile = activeFile && isHtmlFile(activeFile.name)
+      ? activeFile
+      : allFiles.find((f) => isHtmlFile(f.name));
+    if (!htmlFile) return;
+    const t = setTimeout(() => {
+      setLivePreviewHtml(buildPreviewHtml(htmlFile.content, allFiles));
+    }, 400);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFile?.content, tree, terminalTab]);
 
   const openFile = useCallback((node: FileNode) => {
     if (node.type !== "file") return;
@@ -206,9 +252,36 @@ export default function IDE() {
     return ext === "l" || ext === "y";
   };
 
+  const isHtmlFile = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase();
+    return ext === "html" || ext === "htm";
+  };
+
+  const handleGoLive = useCallback(() => {
+    if (!activeFile) return;
+    const allFiles = collectFiles(tree).map((f) => ({
+      name: f.name,
+      path: f.path,
+      content: f.content,
+    }));
+    const htmlFile = isHtmlFile(activeFile.name) ? activeFile : allFiles.find((f) => isHtmlFile(f.name));
+    if (!htmlFile) {
+      toast({ title: "No HTML file found", description: "Open an HTML file to use Go Live.", variant: "destructive" });
+      return;
+    }
+    const rendered = buildPreviewHtml(htmlFile.content, allFiles);
+    setLivePreviewHtml(rendered);
+    setTerminalOpen(true);
+    setTerminalTab("preview");
+  }, [activeFile, tree, toast]);
+
   const handleRun = async () => {
     if (!activeFile) {
       toast({ title: "No file open", description: "Open or create a file first.", variant: "destructive" });
+      return;
+    }
+    if (isHtmlFile(activeFile.name) || activeFile.name.endsWith(".css")) {
+      handleGoLive();
       return;
     }
     setRunning(true);
@@ -631,13 +704,25 @@ export default function IDE() {
           )}
           <Button
             onClick={handleRun}
-            disabled={running || !activeFile}
+            disabled={running || !activeFile || (activeFile != null && (isHtmlFile(activeFile.name) || activeFile.name.endsWith(".css")))}
             size="sm"
             className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0"
           >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline ml-1">Run</span>
           </Button>
+
+          {activeFile && (isHtmlFile(activeFile.name) || activeFile.name.endsWith(".css")) && (
+            <Button
+              onClick={handleGoLive}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0 gap-1"
+              title="Open live HTML preview"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Go Live</span>
+            </Button>
+          )}
 
           <Button
             onClick={() => setImportModalOpen(true)}
@@ -841,6 +926,36 @@ export default function IDE() {
                     Output
                   </button>
 
+                  {livePreviewHtml !== null && (
+                    <div className={`flex items-center flex-shrink-0 border-b-2 transition-colors ${terminalTab === "preview" ? "border-blue-500" : "border-transparent"}`}>
+                      <button
+                        onClick={() => setTerminalTab("preview")}
+                        className={`flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-xs transition-colors ${terminalTab === "preview" ? "text-white" : "text-gray-500 hover:text-gray-300"}`}
+                      >
+                        <MonitorPlay className="h-3 w-3" />
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([livePreviewHtml], { type: "text/html" });
+                          const url = URL.createObjectURL(blob);
+                          window.open(url, "_blank");
+                        }}
+                        title="Pop out in new tab"
+                        className="p-1 text-gray-600 hover:text-blue-400 rounded transition-colors"
+                      >
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </button>
+                      <button
+                        onClick={() => { setLivePreviewHtml(null); if (terminalTab === "preview") setTerminalTab("output"); }}
+                        title="Close preview"
+                        className="p-1 text-gray-600 hover:text-red-400 rounded transition-colors"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  )}
+
                   {shellSessions.map((session) => (
                     <div
                       key={session.id}
@@ -931,9 +1046,48 @@ export default function IDE() {
 
           {/* Terminal panel — always in DOM so shell PTY is never killed */}
           <div
-            className="h-64 sm:h-72 md:h-80 bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden"
-            style={{ display: terminalOpen ? "flex" : "none" }}
+            className="bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden"
+            style={{
+              display: terminalOpen ? "flex" : "none",
+              height: terminalTab === "preview" ? "55vh" : "20rem",
+              minHeight: terminalTab === "preview" ? 320 : 160,
+              maxHeight: terminalTab === "preview" ? "60vh" : "24rem",
+            }}
           >
+
+              {/* Live HTML Preview tab */}
+              {terminalTab === "preview" && livePreviewHtml !== null && (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white relative">
+                  <div className="absolute top-1 right-2 z-10 flex gap-1">
+                    <button
+                      onClick={handleGoLive}
+                      title="Refresh preview"
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-blue-600/90 hover:bg-blue-700 text-white rounded shadow"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                      Refresh
+                    </button>
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([livePreviewHtml], { type: "text/html" });
+                        window.open(URL.createObjectURL(blob), "_blank");
+                      }}
+                      title="Open in new tab"
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-gray-700/90 hover:bg-gray-600 text-white rounded shadow"
+                    >
+                      <ExternalLink className="h-2.5 w-2.5" />
+                      New Tab
+                    </button>
+                  </div>
+                  <iframe
+                    key={livePreviewHtml.length}
+                    srcDoc={livePreviewHtml}
+                    sandbox="allow-scripts allow-forms allow-modals"
+                    className="flex-1 w-full border-0"
+                    title="Live Preview"
+                  />
+                </div>
+              )}
 
               {/* Output tab — conditionally rendered, flex-col with stdin at bottom */}
               {terminalTab === "output" && (

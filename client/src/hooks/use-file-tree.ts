@@ -240,5 +240,18 @@ export function useFileTree() {
     return blank;
   }, [persist]);
 
-  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll };
+  const moveNode = useCallback(
+    (nodeId: string, targetFolderId: string | null) => {
+      const node = findNodeById(tree, nodeId);
+      if (!node) return;
+      if (nodeId === targetFolderId) return;
+      if (targetFolderId && findNodeById(node.children, targetFolderId)) return;
+      let next = deleteNodeFromTree(tree, nodeId);
+      next = addChildToFolder(next, targetFolderId, node);
+      persist(next);
+    },
+    [tree, persist]
+  );
+
+  return { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll, moveNode };
 }

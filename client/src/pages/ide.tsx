@@ -83,7 +83,7 @@ export default function IDE() {
     { id: "shell-1", label: "bash 1", revision: 0 },
   ]);
 
-  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll } = useFileTree();
+  const { tree, createFile, createFolder, deleteNode, renameNode, updateContent, toggleFolder, importFiles, replaceWithFiles, clearAll, moveNode } = useFileTree();
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
     const saved = localStorage.getItem("bm_open_tabs");
@@ -172,7 +172,7 @@ export default function IDE() {
 
   useEffect(() => {
     if (terminalTab !== "preview" || !livePreviewHtml) return;
-    const allFiles = collectFiles(tree).map((f) => ({ name: f.name, path: f.path, content: f.content }));
+    const allFiles = collectFiles(tree).map((f) => ({ name: f.path.split("/").pop() ?? f.path, path: f.path, content: f.content }));
     const htmlFile = activeFile && isHtmlFile(activeFile.name)
       ? activeFile
       : allFiles.find((f) => isHtmlFile(f.name));
@@ -260,7 +260,7 @@ export default function IDE() {
   const handleGoLive = useCallback(() => {
     if (!activeFile) return;
     const allFiles = collectFiles(tree).map((f) => ({
-      name: f.name,
+      name: f.path.split("/").pop() ?? f.path,
       path: f.path,
       content: f.content,
     }));
@@ -322,6 +322,9 @@ export default function IDE() {
         }
         if (result.stdout) out?.writeOutput(result.stdout);
         if (result.stderr) out?.writeOutput(result.stderr, true);
+        if (!result.stdout && !result.stderr) {
+          out?.writeOutput("\x1b[33m[Programme ran but did not print anything]\x1b[0m");
+        }
         const exitColor = result.ok ? "\x1b[32m" : "\x1b[31m";
         out?.writeOutput(`${exitColor}[exited: code ${result.exit_code} · ${result.phase}]\x1b[0m`);
         if (result.ok && result.binary) {
@@ -354,6 +357,9 @@ export default function IDE() {
       const result: RunResult = await res.json();
       if (result.stdout) out?.writeOutput(result.stdout);
       if (result.stderr) out?.writeOutput(result.stderr, true);
+      if (!result.stdout && !result.stderr) {
+        out?.writeOutput("\x1b[33m[Programme ran but did not print anything]\x1b[0m");
+      }
       const exitColor = result.ok ? "\x1b[32m" : "\x1b[31m";
       out?.writeOutput(`${exitColor}[exited: code ${result.exit_code} · ${result.phase}]\x1b[0m`);
     } catch (err: any) {
@@ -827,6 +833,7 @@ export default function IDE() {
             onPushAll={handlePushAll}
             onClearAll={handleClearAll}
             onDropFiles={handleImportFiles}
+            onMoveNode={moveNode}
             loading={loadingRepoFiles}
           />
         </div>
@@ -881,7 +888,10 @@ export default function IDE() {
             </div>
           )}
 
-          <div className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden`}>
+          <div
+            className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden`}
+            onMouseDown={() => { if (terminalOpen) setTerminalOpen(false); }}
+          >
             {activeFile ? (
               <CodeMirror
                 key={activeFile.id}
@@ -1120,7 +1130,7 @@ export default function IDE() {
                   <div className="flex-shrink-0 border-t border-[#2d2d2d] bg-[#141414]">
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e1e]">
                       <span className="text-[10px] text-[#569cd6] font-mono font-semibold tracking-wide">stdin</span>
-                      <span className="text-[10px] text-gray-600">— type a value and press Enter to add</span>
+                      <span className="text-[10px] text-green-600 font-medium">— User Input Here</span>
                       {stdinLines.length > 0 && (
                         <button
                           onClick={() => setStdinLines([])}
@@ -1138,8 +1148,8 @@ export default function IDE() {
                         ))}
                       </div>
                     )}
-                    <div className="flex items-center gap-2 px-3 py-1.5">
-                      <span className="text-[10px] text-gray-600 font-mono select-none">{stdinLines.length + 1}&gt;</span>
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <span className="text-xs text-green-500 font-mono font-bold select-none">{stdinLines.length + 1}&gt;</span>
                       <input
                         type="text"
                         value={stdinDraft}
@@ -1151,9 +1161,9 @@ export default function IDE() {
                             setStdinDraft("");
                           }
                         }}
-                        placeholder="type input value, press Enter to add…"
+                        placeholder="User Input Here..."
                         spellCheck={false}
-                        className="flex-1 bg-transparent text-white text-xs font-mono placeholder:text-[#2e2e2e] focus:outline-none"
+                        className="flex-1 bg-transparent text-green-400 text-sm font-mono font-medium placeholder:text-green-800 focus:outline-none"
                       />
                     </div>
                   </div>

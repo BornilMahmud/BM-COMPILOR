@@ -18,6 +18,7 @@ interface Props {
   onPushAll: () => void;
   onClearAll: () => void;
   onDropFiles?: (files: { path: string; content: string }[]) => void;
+  onMoveNode?: (nodeId: string, targetFolderId: string | null) => void;
   loading?: boolean;
 }
 
@@ -39,6 +40,8 @@ function FileIcon({ name }: { name: string }) {
     y: "text-amber-400",
     out: "text-lime-400", exe: "text-lime-400",
     md: "text-blue-200", json: "text-yellow-200",
+    html: "text-orange-300", htm: "text-orange-300",
+    css: "text-sky-300",
   };
   return <FileCode className={`h-3.5 w-3.5 flex-shrink-0 ${colors[ext] ?? "text-gray-400"}`} />;
 }
@@ -119,13 +122,17 @@ interface NodeRowProps {
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
   onPushFolder: (nodes: FileNode[], folderPath: string) => void;
+  dragNodeId: React.MutableRefObject<string | null>;
+  onMoveNode?: (nodeId: string, targetFolderId: string | null) => void;
 }
 
 function NodeRow({
   node, depth, activeFileId, tree, editing, setEditing,
   onOpenFile, onConfirmCreate, onConfirmRename, onDelete, onToggle, onPushFolder,
+  dragNodeId, onMoveNode,
 }: NodeRowProps) {
   const [hover, setHover] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const isActive = node.id === activeFileId;
   const isRenaming = editing?.kind === "rename" && editing.id === node.id;
 
@@ -141,8 +148,40 @@ function NodeRow({
         />
       ) : (
         <div
-          className={`flex items-center gap-1 px-1 py-[3px] cursor-pointer rounded-sm
-            ${isActive ? "bg-[#37373d]" : hover ? "bg-[#2a2d2e]" : ""}`}
+          draggable
+          onDragStart={(e) => {
+            dragNodeId.current = node.id;
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", node.id);
+          }}
+          onDragEnd={() => { dragNodeId.current = null; }}
+          onDragOver={(e) => {
+            if (node.type !== "folder") return;
+            if (!dragNodeId.current || dragNodeId.current === node.id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "move";
+            setDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            setDragOver(false);
+          }}
+          onDrop={(e) => {
+            if (node.type !== "folder") return;
+            e.preventDefault();
+            e.stopPropagation();
+            setDragOver(false);
+            const id = dragNodeId.current;
+            if (id && id !== node.id && onMoveNode) {
+              onMoveNode(id, node.id);
+            }
+            dragNodeId.current = null;
+          }}
+          className={`flex items-center gap-1 px-1 py-[3px] cursor-pointer rounded-sm select-none transition-colors
+            ${dragOver ? "bg-[#1a3a5c] border border-dashed border-blue-500" : ""}
+            ${!dragOver && isActive ? "bg-[#37373d]" : ""}
+            ${!dragOver && !isActive && hover ? "bg-[#2a2d2e]" : ""}`}
           style={{ paddingLeft: `${8 + depth * 12}px` }}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
@@ -164,11 +203,11 @@ function NodeRow({
             </>
           )}
 
-          <span className={`text-xs truncate flex-1 ${isActive ? "text-white" : "text-gray-300"}`}>
+          <span className={`text-xs truncate flex-1 ${dragOver ? "text-blue-300" : isActive ? "text-white" : "text-gray-300"}`}>
             {node.name}
           </span>
 
-          {(hover || isActive) && (
+          {(hover || isActive) && !dragOver && (
             <span className="flex items-center gap-0.5 ml-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
               {node.type === "folder" && (
                 <>
@@ -234,6 +273,8 @@ function NodeRow({
               onDelete={onDelete}
               onToggle={onToggle}
               onPushFolder={onPushFolder}
+              dragNodeId={dragNodeId}
+              onMoveNode={onMoveNode}
             />
           ))}
         </>
@@ -244,11 +285,13 @@ function NodeRow({
 
 export default function FileExplorer({
   tree, activeFileId, onOpenFile, onCreate,
-  onDelete, onRename, onToggle, onPushFolder, onPushAll, onClearAll, onDropFiles, loading = false,
+  onDelete, onRename, onToggle, onPushFolder, onPushAll, onClearAll, onDropFiles, onMoveNode, loading = false,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
+  const [rootDragOver, setRootDragOver] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const dragNodeId = useRef<string | null>(null);
 
   const handleConfirmCreate = (type: "file" | "folder", parentId: string | null, name: string) => {
     const node = onCreate(type, parentId, name);
@@ -260,23 +303,34 @@ export default function FileExplorer({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDraggingOver(true);
+    if (dragNodeId.current) {
+      setRootDragOver(true);
+    } else {
+      setDraggingOver(true);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setDraggingOver(false);
+    setRootDragOver(false);
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDraggingOver(false);
-    if (!onDropFiles) return;
+    setRootDragOver(false);
 
+    if (dragNodeId.current && onMoveNode) {
+      onMoveNode(dragNodeId.current, null);
+      dragNodeId.current = null;
+      return;
+    }
+
+    if (!onDropFiles) return;
     const results: { path: string; content: string }[] = [];
     const items = Array.from(e.dataTransfer.items);
-
     for (const item of items) {
       if (item.kind === "file") {
         const entry = item.webkitGetAsEntry?.();
@@ -295,13 +349,14 @@ export default function FileExplorer({
         }
       }
     }
-
     if (results.length > 0) onDropFiles(results);
   };
 
   return (
     <div
-      className={`flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c] relative transition-colors ${draggingOver ? "bg-[#1a2a3a] border-blue-500" : ""}`}
+      className={`flex flex-col h-full bg-[#252526] border-r border-[#3c3c3c] relative transition-colors
+        ${draggingOver ? "bg-[#1a2a3a] border-blue-500" : ""}
+        ${rootDragOver ? "bg-[#1a2a2a]" : ""}`}
       style={{ width: 220, minWidth: 220 }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -319,6 +374,10 @@ export default function FileExplorer({
           <span className="text-[11px] text-blue-300 font-medium">Drop files to add</span>
         </div>
       )}
+      {rootDragOver && !draggingOver && (
+        <div className="absolute inset-x-0 bottom-0 z-10 h-1 bg-blue-500 rounded pointer-events-none" />
+      )}
+
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0 border-b border-[#3c3c3c]">
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Explorer</span>
         <div className="flex items-center gap-0.5">
@@ -389,6 +448,8 @@ export default function FileExplorer({
             onDelete={onDelete}
             onToggle={onToggle}
             onPushFolder={onPushFolder}
+            dragNodeId={dragNodeId}
+            onMoveNode={onMoveNode}
           />
         ))}
 

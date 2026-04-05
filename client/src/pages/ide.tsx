@@ -98,7 +98,11 @@ export default function IDE() {
   const [syncingShell, setSyncingShell] = useState(false);
   const [lastBuild, setLastBuild] = useState<{ binary: string; name: string } | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(true);
+  const [terminalHeight, setTerminalHeight] = useState(240);
   const [terminalTab, setTerminalTab] = useState<string>("output");
+  const isDraggingTerminal = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
   const [stdinLines, setStdinLines] = useState<string[]>([]);
   const [stdinDraft, setStdinDraft] = useState("");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
@@ -643,6 +647,33 @@ export default function IDE() {
     setTimeout(() => { shellHandlesMap.current.get(id)?.focus(); }, 200);
   };
 
+  const handleTerminalDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingTerminal.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = terminalHeight;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDraggingTerminal.current) return;
+      const delta = dragStartY.current - ev.clientY;
+      const next = Math.max(80, Math.min(window.innerHeight * 0.85, dragStartHeight.current + delta));
+      setTerminalHeight(next);
+    };
+
+    const onMouseUp = () => {
+      isDraggingTerminal.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [terminalHeight]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); handleRun(); }
     if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); if (!isGuest) handleSaveFile(); }
@@ -890,8 +921,8 @@ export default function IDE() {
           )}
 
           <div
-            className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden`}
-            onMouseDown={() => { if (terminalOpen) setTerminalOpen(false); }}
+            className={`${terminalOpen ? "flex-1" : "flex-[3]"} overflow-hidden min-h-0`}
+            onMouseDown={() => { if (terminalOpen && !isDraggingTerminal.current) setTerminalOpen(false); }}
           >
             {activeFile ? (
               <CodeMirror
@@ -912,6 +943,16 @@ export default function IDE() {
               </div>
             )}
           </div>
+
+          {terminalOpen && (
+            <div
+              className="flex-shrink-0 h-[5px] cursor-row-resize bg-[#2d2d2d] hover:bg-blue-600 active:bg-blue-500 transition-colors flex items-center justify-center group"
+              onMouseDown={handleTerminalDragStart}
+              title="Drag to resize terminal"
+            >
+              <div className="w-10 h-[2px] rounded-full bg-[#555] group-hover:bg-blue-400 transition-colors" />
+            </div>
+          )}
 
           <div className="flex-shrink-0 border-t border-[#3c3c3c]">
             <div className="flex items-center bg-[#252526]">
@@ -1060,9 +1101,9 @@ export default function IDE() {
             className="bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden"
             style={{
               display: terminalOpen ? "flex" : "none",
-              height: terminalTab === "preview" ? "55vh" : "clamp(160px, 30vh, 320px)",
-              minHeight: terminalTab === "preview" ? 280 : 140,
-              maxHeight: terminalTab === "preview" ? "65vh" : "clamp(200px, 35vh, 384px)",
+              height: terminalTab === "preview" ? "55vh" : terminalHeight,
+              minHeight: terminalTab === "preview" ? 280 : 80,
+              maxHeight: terminalTab === "preview" ? "65vh" : "85vh",
             }}
           >
 

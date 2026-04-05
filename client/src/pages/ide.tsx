@@ -663,8 +663,8 @@ export default function IDE() {
 
   return (
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
-      <header className="flex items-center justify-between px-2 sm:px-3 h-11 bg-[#252526] border-b border-[#3c3c3c] flex-shrink-0 gap-1">
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+      <header className="flex items-center justify-between px-2 sm:px-3 h-11 bg-[#252526] border-b border-[#3c3c3c] flex-shrink-0 gap-1 min-w-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             className="p-1.5 rounded hover:bg-[#3c3c3c] text-gray-400 hover:text-white md:hidden"
@@ -672,11 +672,11 @@ export default function IDE() {
           >
             <Menu className="h-4 w-4" />
           </button>
-          <img src="/bm-logo.png" alt="BM" className="w-6 h-6 object-contain" />
-          <span className="font-semibold text-sm hidden sm:inline text-gray-300">BM Compiler</span>
+          <img src="/bm-logo.png" alt="BM" className="w-6 h-6 object-contain flex-shrink-0" />
+          <span className="font-semibold text-sm hidden md:inline text-gray-300 whitespace-nowrap">BM Compiler</span>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0 px-1">
           <Select
             value={language}
             onValueChange={() => {
@@ -686,10 +686,10 @@ export default function IDE() {
               }
             }}
           >
-            <SelectTrigger className="w-28 sm:w-36 h-7 bg-[#3c3c3c] border-[#555] text-white text-xs flex-shrink-0">
+            <SelectTrigger className="w-24 sm:w-32 md:w-36 h-7 bg-[#3c3c3c] border-[#555] text-white text-xs flex-shrink-0">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[#252526] border-[#555] text-white max-h-80">
+            <SelectContent className="bg-[#252526] border-[#555] text-white max-h-72 sm:max-h-80">
               {languageGroups.map((group) => (
                 <div key={group.label}>
                   <div className="px-2 py-1 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{group.label}</div>
@@ -704,15 +704,16 @@ export default function IDE() {
           </Select>
 
           {activeFile && isFlexBisonFile(activeFile.name) && (
-            <span className="hidden sm:inline text-[10px] text-amber-400 font-mono bg-amber-900/30 border border-amber-700/40 px-1.5 py-0.5 rounded flex-shrink-0">
+            <span className="hidden sm:inline text-[10px] text-amber-400 font-mono bg-amber-900/30 border border-amber-700/40 px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
               Flex/Bison
             </span>
           )}
+
           <Button
             onClick={handleRun}
             disabled={running || !activeFile || (activeFile != null && (isHtmlFile(activeFile.name) || activeFile.name.endsWith(".css")))}
             size="sm"
-            className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0"
+            className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs flex-shrink-0"
           >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline ml-1">Run</span>
@@ -722,7 +723,7 @@ export default function IDE() {
             <Button
               onClick={handleGoLive}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0 gap-1"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 text-xs flex-shrink-0 gap-1"
               title="Open live HTML preview"
             >
               <Globe className="h-3.5 w-3.5" />
@@ -734,11 +735,11 @@ export default function IDE() {
             onClick={() => setImportModalOpen(true)}
             size="sm"
             variant="outline"
-            className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 sm:px-3 text-xs flex-shrink-0"
+            className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 text-xs flex-shrink-0"
             title="Import project from GitHub"
           >
             <Github className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline ml-1">Import</span>
+            <span className="hidden md:inline ml-1">Import</span>
           </Button>
 
           {!isGuest && (
@@ -746,11 +747,11 @@ export default function IDE() {
               onClick={handleSaveFile}
               disabled={saving || !activeFile || !repo}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 sm:px-3 text-xs flex-shrink-0"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-2 text-xs flex-shrink-0"
               title="Save current file to GitHub (Ctrl+S)"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              <span className="hidden md:inline ml-1">Save</span>
+              <span className="hidden lg:inline ml-1">Save</span>
             </Button>
           )}
 
@@ -760,16 +761,16 @@ export default function IDE() {
               disabled={saving || !repo}
               size="sm"
               variant="outline"
-              className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 sm:px-3 text-xs hidden sm:flex flex-shrink-0"
+              className="bg-transparent border-[#555] hover:bg-[#3c3c3c] text-gray-300 h-7 px-2 text-xs hidden sm:flex flex-shrink-0"
               title="Push all files to GitHub"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              <span className="hidden md:inline ml-1">Push All</span>
+              <span className="hidden lg:inline ml-1">Push All</span>
             </Button>
           )}
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {!isGuest && repo && (
             <div className="flex items-center gap-1">
               <button
@@ -777,8 +778,8 @@ export default function IDE() {
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
                 title={`Connected to ${repo.full_name}`}
               >
-                <FolderGit2 className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline max-w-[80px] truncate">{repo.name}</span>
+                <FolderGit2 className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="hidden xl:inline max-w-[80px] truncate">{repo.name}</span>
               </button>
               <button
                 onClick={() => loadRepoFiles()}
@@ -794,13 +795,13 @@ export default function IDE() {
           )}
           {isGuest ? (
             <Button variant="ghost" size="sm" onClick={() => navigate("/")}
-              className="text-gray-400 hover:text-white h-7 text-xs gap-1">
+              className="text-gray-400 hover:text-white h-7 text-xs gap-1 px-2">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Sign in</span>
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={handleLogout}
-              className="text-gray-400 hover:text-white h-7">
+              className="text-gray-400 hover:text-white h-7 px-2">
               <LogOut className="h-4 w-4" />
             </Button>
           )}
@@ -1059,9 +1060,9 @@ export default function IDE() {
             className="bg-[#0d0d0d] border-t border-[#2d2d2d] flex flex-col flex-shrink-0 relative overflow-hidden"
             style={{
               display: terminalOpen ? "flex" : "none",
-              height: terminalTab === "preview" ? "55vh" : "20rem",
-              minHeight: terminalTab === "preview" ? 320 : 160,
-              maxHeight: terminalTab === "preview" ? "60vh" : "24rem",
+              height: terminalTab === "preview" ? "55vh" : "clamp(160px, 30vh, 320px)",
+              minHeight: terminalTab === "preview" ? 280 : 140,
+              maxHeight: terminalTab === "preview" ? "65vh" : "clamp(200px, 35vh, 384px)",
             }}
           >
 
